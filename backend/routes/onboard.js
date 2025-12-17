@@ -1,4 +1,3 @@
-// backend/routes/onboard.js
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
@@ -25,12 +24,16 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 const createSlug = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
+// CORRECTED: Added comma between objects
 router.post('/submit', upload.fields([
     { name: 'logo', maxCount: 1 },
-    { name: 'cover_photo', maxCount: 1 }
+    { name: 'cover_photo', maxCount: 1 }, // <--- Comma added here
+    { name: 'staff_photos', maxCount: 10 } // <--- New line for staff photos
 ]), (req, res) => {
     try {
-        const data = JSON.parse(req.body.data); 
+        const data = JSON.parse(req.body.data);
+        const userId = data.user_id; 
+
         // Normalize paths for Windows/Mac compatibility
         const logoPath = req.files['logo'] ? 'uploads/' + req.files['logo'][0].filename : null;
         const coverPath = req.files['cover_photo'] ? 'uploads/' + req.files['cover_photo'][0].filename : null;
@@ -38,14 +41,14 @@ router.post('/submit', upload.fields([
 
         const insertTransaction = db.transaction(() => {
         
-        // A. Insert Merchant (Added break_duration and book_ahead)
+        // A. Insert Merchant (Updated for Phone and Booking Fee)
         const stmtMerchant = db.prepare(`
             INSERT INTO merchants (
-                slug, name, industry, address, timezone, 
+                slug, name, industry, address, phone, 
                 logo_path, cover_photo_path, 
-                about, policies_info, cancellation_policy, deposit_required,
+                about, policies_info, cancellation_policy, deposit_required, booking_fee,
                 break_duration, book_ahead_days
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
 
         const info = stmtMerchant.run(
@@ -53,15 +56,16 @@ router.post('/submit', upload.fields([
             data.name, 
             data.industry, 
             data.address, 
-            data.timezone,
+            data.phone, // Phone number
             logoPath, 
             coverPath,
             data.about, 
             data.policies, 
             data.cancellationPolicy, 
             data.depositRequired ? 1 : 0,
-            data.breakTime, // Read from frontend
-            data.bookAhead  // Read from frontend
+            data.bookingFeeAmount || 0, // Booking Fee
+            data.breakTime, 
+            data.bookAhead
         );
         
         const merchantId = info.lastInsertRowid;
@@ -75,21 +79,35 @@ router.post('/submit', upload.fields([
             stmtService.run(merchantId, service.name, service.duration, service.price, service.description);
         }
 
-        // C. Insert Staff
+        // C. Insert Staff (Updated for Photos)
         const stmtStaff = db.prepare(`
-            INSERT INTO staff (merchant_id, name, bio, specialties)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO staff (merchant_id, name, bio, specialties, photo_path)
+            VALUES (?, ?, ?, ?, ?)
         `);
+
+        // Get the array of uploaded staff photos (if any)
+        const staffPhotos = req.files['staff_photos'] || [];
+
         for (const member of data.staff) {
+            let photoPath = null;
+            
+            // Check if this member has a linked photo
+            if (member.photoIndex !== undefined && member.photoIndex > -1) {
+                if (staffPhotos[member.photoIndex]) {
+                    photoPath = 'uploads/' + staffPhotos[member.photoIndex].filename;
+                }
+            }
+
             stmtStaff.run(
                 merchantId, 
                 member.name, 
                 member.bio, 
-                JSON.stringify(member.services || [])
+                JSON.stringify(member.services || []),
+                photoPath // Insert photo path
             );
         }
 
-        // D. Insert Working Hours (Now reads REAL data)
+        // D. Insert Working Hours
         const stmtHours = db.prepare(`
             INSERT INTO working_hours (merchant_id, day_of_week, is_open, open_time, close_time)
             VALUES (?, ?, ?, ?, ?)
@@ -113,6 +131,12 @@ router.post('/submit', upload.fields([
     });
 
         const result = insertTransaction();
+        
+        // Update user's merchant_id
+        if (userId) {
+            db.prepare('UPDATE users SET merchant_id = ? WHERE id = ?').run(result.merchantId, userId);
+        }
+        
         res.json({ success: true, ...result });
 
     } catch (error) {

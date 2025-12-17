@@ -8,15 +8,17 @@ export interface Business {
   image: string;
   rating: number;
   reviewCount: number;
-  priceRange: number; // 1-4 ($, $$, $$$, $$$$)
+  priceRange: number;
   location: string;
-  distance?: number; // km
+  distance?: number;
   nextAvailable?: string;
   badges: string[];
   whatsappEnabled: boolean;
   instantConfirm: boolean;
   phone: string;
   address: string;
+  bookingFee?: number; // <--- Add this
+  staff?: Staff[];     // <--- Add this
   policies: {
     cancellation: string;
     deposit: string;
@@ -24,7 +26,7 @@ export interface Business {
   };
   gallery: string[];
   hours: {
-    [key: string]: string; // day: hours
+    [key: string]: string;
   };
 }
 
@@ -66,4 +68,12 @@ export interface Review {
   comment: string;
   date: Date;
   verified: boolean;
+}
+
+export interface Staff {
+  id: string;
+  name: string;
+  bio: string;
+  photo_path?: string;
+  specialties?: string[];
 }

@@ -16,6 +16,7 @@ interface BookingWidgetProps {
 
 export function BookingWidget({ services, business, onContinue, isSticky = false }: BookingWidgetProps) {
   const [selectedService, setSelectedService] = useState<string>('');
+  const [selectedStaffId, setSelectedStaffId] = useState<string>('any');
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [selectedTime, setSelectedTime] = useState<string>('');
   const [partySize, setPartySize] = useState(1);
@@ -102,17 +103,22 @@ export function BookingWidget({ services, business, onContinue, isSticky = false
   };
 
   const handleContinue = () => {
-    if (!selectedService || !selectedDate || !selectedTime) return;
-    
-    onContinue({
-      service: selectedServiceData,
-      date: selectedDate,
-      time: selectedTime,
-      partySize,
-      duration,
-      totalPrice: calculateTotal(),
-    });
-  };
+  if (!selectedService || !selectedDate || !selectedTime) return;
+
+  onContinue({
+    service: selectedServiceData,
+    date: selectedDate,
+    time: selectedTime,
+    partySize,
+    duration,
+    totalPrice: calculateTotal(),
+    // Add these two lines:
+    staffId: selectedStaffId === 'any' ? null : selectedStaffId,
+    staffName: selectedStaffId === 'any' 
+      ? 'Any Professional' 
+      : business.staff?.find((s: any) => s.id.toString() === selectedStaffId)?.name
+  });
+};
 
   const containerClasses = isSticky
     ? 'bg-white rounded-2xl shadow-soft p-6 sticky top-24'
@@ -134,6 +140,24 @@ export function BookingWidget({ services, business, onContinue, isSticky = false
                   <span>{service.name}</span>
                   <span className="text-[var(--color-text-secondary)] ml-4">${service.price}</span>
                 </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+{/* Select Staff Section */}
+      <div className="mt-4 mb-6">
+        <label className="block text-sm mb-2">Select Staff</label>
+        <Select value={selectedStaffId} onValueChange={setSelectedStaffId}>
+          <SelectTrigger>
+            <SelectValue placeholder="Any Professional" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="any">Any Professional</SelectItem>
+            {business.staff && business.staff.map((member: any) => (
+              <SelectItem key={member.id} value={member.id.toString()}>
+                {member.name}
               </SelectItem>
             ))}
           </SelectContent>
@@ -206,12 +230,12 @@ export function BookingWidget({ services, business, onContinue, isSticky = false
         </div>
         <div className="flex items-center justify-between mb-2">
           <span className="text-[var(--color-text-secondary)]">Booking Fee</span>
-          <span>$2</span>
+          <span>${business.bookingFee || 0}</span>
         </div>
         <Separator className="my-3" />
         <div className="flex items-center justify-between">
           <span>Total</span>
-          <span className="text-xl">${calculateTotal() + 2}</span>
+          <span className="text-xl">${calculateTotal() + (business.bookingFee || 0)}</span>
         </div>
       </div>
 

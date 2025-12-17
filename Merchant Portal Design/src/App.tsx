@@ -15,10 +15,21 @@ type AppState = 'auth' | 'onboarding' | 'app';
 type AppPage = 'dashboard' | 'calendar' | 'bookings' | 'reviews' | 'content' | 'automations' | 'settings';
 
 export default function App() {
-  const [appState, setAppState] = useState<AppState>('auth');
+  const [appState, setAppState] = useState<AppState>(() => {
+    // Check if user is already logged in
+    const user = localStorage.getItem('user');
+    return user ? 'app' : 'auth';
+  });
   const [currentPage, setCurrentPage] = useState<AppPage>('dashboard');
+  const [currentUser, setCurrentUser] = useState<any>(() => {
+    const user = localStorage.getItem('user');
+    return user ? JSON.parse(user) : null;
+  });
 
-  const handleLogin = () => {
+  const handleLogin = (user: any) => {
+    setCurrentUser(user);
+    // Check if user has completed onboarding (has merchant record)
+    // For now, always go to app - we can add onboarding check later
     setAppState('app');
     setCurrentPage('dashboard');
   };
@@ -28,11 +39,16 @@ export default function App() {
   };
 
   const handleCompleteOnboarding = () => {
-    setAppState('app');
+    // Log out the user after onboarding completion
+    localStorage.removeItem('user');
+    setCurrentUser(null);
+    setAppState('auth');
     setCurrentPage('dashboard');
   };
 
   const handleLogout = () => {
+    localStorage.removeItem('user');
+    setCurrentUser(null);
     setAppState('auth');
     setCurrentPage('dashboard');
   };
@@ -46,9 +62,9 @@ export default function App() {
       case 'dashboard':
         return <Dashboard onNavigate={handleNavigate} />;
       case 'calendar':
-        return <CalendarPage onNavigate={handleNavigate} />;
+        return <CalendarPage onNavigate={handleNavigate} user={currentUser} />;
       case 'bookings':
-        return <BookingsPage onNavigate={handleNavigate} />;
+        return <BookingsPage onNavigate={handleNavigate} user={currentUser} />;
       case 'reviews':
         return <ReviewsPage />;
       case 'content':
@@ -89,6 +105,7 @@ export default function App() {
         currentPage={currentPage}
         onNavigate={handleNavigate}
         onLogout={handleLogout}
+        user={currentUser}
       >
         {renderCurrentPage()}
       </Layout>

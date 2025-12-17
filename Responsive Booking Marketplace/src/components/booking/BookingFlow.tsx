@@ -17,6 +17,8 @@ interface BookingFlowProps {
     time: string;
     partySize: number;
     totalPrice: number;
+    staffName?: string; // <--- Add this line
+    staffId?: string;   // <--- Add this line
   };
   onComplete: (bookingData: any) => void;
   onBack: () => void;
@@ -40,6 +42,8 @@ export function BookingFlow({ business, initialData, onComplete, onBack }: Booki
     onComplete({
       ...initialData,
       ...formData,
+      // Calculate final total: Service Price + Business Booking Fee
+      totalPrice: initialData.service.price + (business.bookingFee || 0),
       business,
     });
   };
@@ -259,6 +263,12 @@ export function BookingFlow({ business, initialData, onComplete, onBack }: Booki
                     <span>{initialData.service.name}</span>
                   </div>
                   <div className="flex items-center justify-between">
+  <span className="text-[var(--color-text-secondary)]">Staff</span>
+  <span className="font-medium text-[var(--color-primary)]">
+    {initialData.staffName || 'Any Professional'}
+  </span>
+</div>
+                  <div className="flex items-center justify-between">
                     <span className="text-[var(--color-text-secondary)]">Date</span>
                     <span>{format(initialData.date, 'MMM d, yyyy')}</span>
                   </div>
@@ -314,13 +324,13 @@ export function BookingFlow({ business, initialData, onComplete, onBack }: Booki
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-[var(--color-text-secondary)]">Booking Fee</span>
-                    <span>$2</span>
+                    <span>${business.bookingFee || 0}</span>
                   </div>
                 </div>
                 <Separator className="my-3" />
                 <div className="flex items-center justify-between">
                   <span>Total</span>
-                  <span className="text-2xl">${initialData.totalPrice + 2}</span>
+                  <span className="text-2xl">${initialData.totalPrice + (business.bookingFee || 0)}</span>
                 </div>
               </div>
 

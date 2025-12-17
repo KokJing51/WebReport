@@ -7,23 +7,73 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { MessageSquare, Smartphone } from 'lucide-react';
 import { Alert, AlertDescription } from '../ui/alert';
+import { toast } from 'sonner';
+import { apiService } from '../../services/api';
 import logo from 'figma:asset/0b6d7a724e60d1fb0252e76f9f181438aa6ab406.png';
 
 interface AuthPageProps {
-  onLogin: () => void;
+  onLogin: (user: any) => void;
   onStartOnboarding: () => void;
 }
 
 export function AuthPage({ onLogin, onStartOnboarding }: AuthPageProps) {
   const [isConnectingWhatsApp, setIsConnectingWhatsApp] = useState(false);
   const [whatsAppConnected, setWhatsAppConnected] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loginData, setLoginData] = useState({ email: '', password: '' });
+  const [signupData, setSignupData] = useState({ email: '', password: '', business_name: '' });
 
-  const handleLogin = () => {
-    onLogin();
+  const handleLogin = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!loginData.email || !loginData.password) {
+      toast.error('Please enter email and password');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await apiService.login(loginData.email, loginData.password);
+      if (response.success && response.user) {
+        localStorage.setItem('user', JSON.stringify(response.user));
+        toast.success('Login successful!');
+        onLogin(response.user);
+      } else {
+        toast.error(response.error || 'Login failed');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Login failed');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleSignUp = () => {
-    onStartOnboarding();
+  const handleSignUp = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!signupData.email || !signupData.password) {
+      toast.error('Please enter email and password');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await apiService.signup(
+        signupData.email,
+        signupData.password,
+        signupData.business_name
+      );
+      if (response.success && response.user) {
+        localStorage.setItem('user', JSON.stringify(response.user));
+        toast.success('Account created successfully!');
+        // Redirect to onboarding instead of dashboard
+        onStartOnboarding();
+      } else {
+        toast.error(response.error || 'Signup failed');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Signup failed');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleConnectWhatsApp = () => {
@@ -88,35 +138,72 @@ export function AuthPage({ onLogin, onStartOnboarding }: AuthPageProps) {
               </TabsList>
               
               <TabsContent value="signin" className="space-y-4">
+                <form onSubmit={handleLogin} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" placeholder="Enter your email" />
+                    <Input 
+                      id="email" 
+                      type="email" 
+                      placeholder="Enter your email"
+                      value={loginData.email}
+                      onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
+                      required
+                    />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password">Password</Label>
-                  <Input id="password" type="password" placeholder="Enter your password" />
+                    <Input 
+                      id="password" 
+                      type="password" 
+                      placeholder="Enter your password"
+                      value={loginData.password}
+                      onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
+                      required
+                    />
                 </div>
-                <Button onClick={handleLogin} className="w-full">
-                  Sign In
+                  <Button type="submit" className="w-full" disabled={isLoading}>
+                    {isLoading ? 'Signing in...' : 'Sign In'}
                 </Button>
+                </form>
               </TabsContent>
               
               <TabsContent value="signup" className="space-y-4">
+                <form onSubmit={handleSignUp} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="business-name">Business Name</Label>
-                  <Input id="business-name" placeholder="Your business name" />
+                    <Label htmlFor="business-name">Business Name (Optional)</Label>
+                    <Input 
+                      id="business-name" 
+                      placeholder="Your business name"
+                      value={signupData.business_name}
+                      onChange={(e) => setSignupData({ ...signupData, business_name: e.target.value })}
+                    />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email-signup">Email</Label>
-                  <Input id="email-signup" type="email" placeholder="Enter your email" />
+                    <Input 
+                      id="email-signup" 
+                      type="email" 
+                      placeholder="Enter your email"
+                      value={signupData.email}
+                      onChange={(e) => setSignupData({ ...signupData, email: e.target.value })}
+                      required
+                    />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password-signup">Password</Label>
-                  <Input id="password-signup" type="password" placeholder="Create a password" />
+                    <Input 
+                      id="password-signup" 
+                      type="password" 
+                      placeholder="Create a password"
+                      value={signupData.password}
+                      onChange={(e) => setSignupData({ ...signupData, password: e.target.value })}
+                      required
+                    />
                 </div>
-                <Button onClick={handleSignUp} className="w-full">
-                  Create Account
+                  <Button type="submit" className="w-full" disabled={isLoading}>
+                    {isLoading ? 'Creating account...' : 'Create Account'}
                 </Button>
+                </form>
               </TabsContent>
             </Tabs>
           </CardContent>

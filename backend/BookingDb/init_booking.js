@@ -19,7 +19,8 @@ const createSchema = () => {
     CREATE TABLE IF NOT EXISTS bookings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         merchant_id INTEGER NOT NULL,
-        service_id INTEGER NOT NULL,
+        service_id INTEGER,
+        staff_id INTEGER,
         customer_name TEXT NOT NULL,
         customer_phone TEXT NOT NULL,
         customer_email TEXT,
@@ -28,7 +29,7 @@ const createSchema = () => {
         party_size INTEGER DEFAULT 1,
         total_price REAL,
         notes TEXT,
-        status TEXT DEFAULT 'confirmed', -- We auto-confirm for this prototype
+        status TEXT DEFAULT 'confirmed',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
     `);

@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "db:init": "node Merchantdb/init.js",
+    "db:init": "node db/init.js",
+    "db:init:booking": "node BookingDb/init_booking.js",
     "setup": "npm install && node Merchantdb/init.js"
   },
   "dependencies": {

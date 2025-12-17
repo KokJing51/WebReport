@@ -19,9 +19,9 @@ import {
   AlertDialogTitle,
 } from "./components/ui/alert-dialog";
 
-// Helper: Fix image URLs from backend
+// --- PASTE THIS HELPER FUNCTION HERE ---
 const getImageUrl = (path: string) => {
-  if (!path) return 'https://images.unsplash.com/photo-1600948836101-f9ffda59d250?w=800'; 
+  if (!path) return null;
   if (path.startsWith('http')) return path;
   return `http://localhost:5000/${path.replace(/\\/g, '/')}`;
 };
@@ -59,6 +59,7 @@ export default function App() {
   
   const [selectedBusiness, setSelectedBusiness] = useState<any>(null);
   const [selectedServices, setSelectedServices] = useState<any[]>([]);
+  const [reviews, setReviews] = useState<any[]>([]);
   const [bookingData, setBookingData] = useState<any>(null);
 
   // 1. Fetch Merchant List & Merge Categories
@@ -89,12 +90,13 @@ export default function App() {
           const isOpenNow = checkIsOpen(b.hours_json);
 
           return {
-            id: b.id.toString(),
+            id: b.id,
             slug: b.slug,
             name: b.name,
             category: b.industry || 'Uncategorized',
             description: b.about || 'No description available',
-            image: getImageUrl(b.cover_photo_path),
+            // Use Logo for the card image (fallback to cover photo if no logo)
+image: getImageUrl(b.logo_path) || getImageUrl(b.cover_photo_path),
             location: b.address,
             rating: 5.0, 
             reviewCount: 0,
@@ -105,7 +107,7 @@ export default function App() {
             
             whatsappEnabled: true,
             instantConfirm: true,
-            phone: '+1234567890',
+            phone: b.phone || '', // <--- Use the real phone from database
             address: b.address,
             gallery: [getImageUrl(b.cover_photo_path)],
             hours: {},
@@ -172,46 +174,85 @@ export default function App() {
   };
 
   // 3. Fetch Details
-  const handleBusinessClick = async (id: string) => {
-    const business = businesses.find(b => b.id === id);
-    if (!business) return;
-
+  const handleBusinessClick = async (business: Business) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/merchants/${business.slug}`);
-      const fullData = await res.json();
+      console.log("Fetching data for ID:", business.id); // Debugging Log
+
+      // 1. Fetch from Backend
+      const res = await fetch(`http://localhost:5000/api/merchants/${business.id}`);
       
+      if (!res.ok) {
+        throw new Error(`Server returned ${res.status}`);
+      }
+      
+      const fullData = await res.json();
+      console.log("Server Response:", fullData); // Debugging Log
+
+      // 2. TRANSLATE: Working Hours (Array -> Object)
+      // Database gives: [{day_of_week: 'Monday', open_time: '09:00', ...}]
+      // Frontend needs: { 'Monday': '09:00 - 17:00' }
       const formattedHours: any = {};
-      if (fullData.hours) {
-        fullData.hours.forEach((h: any) => {
-           if(h.is_open) {
-             formattedHours[h.day_of_week] = `${h.open_time} - ${h.close_time}`;
-           } else {
-             formattedHours[h.day_of_week] = 'Closed';
-           }
-        });
+      if (fullData.hours && Array.isArray(fullData.hours)) {
+         fullData.hours.forEach((h: any) => {
+             if (h.is_open) {
+                 formattedHours[h.day_of_week] = `${h.open_time} - ${h.close_time}`;
+             } else {
+                 formattedHours[h.day_of_week] = 'Closed';
+             }
+         });
       }
 
+      // 3. TRANSLATE: Reviews (Snake_case -> CamelCase)
+      const mappedReviews = (fullData.reviews || []).map((r: any) => ({
+        id: r.id.toString(),
+        customerName: r.customer_name,
+        rating: r.rating,
+        comment: r.comment,
+        date: new Date(r.date),
+        verified: Boolean(r.verified)
+      }));
+      setReviews(mappedReviews);
+
+      // 4. TRANSLATE: Merchant Details (Database -> Frontend Props)
       setSelectedBusiness({
-        ...business,
-        description: fullData.about || business.description,
-        hours: formattedHours,
+        ...business, // Keep basic list info
+        // Overwrite with detailed info from DB:
+        description: fullData.about || "No description provided.",
+        phone: fullData.phone || business.phone,
+        address: fullData.address || business.address,
+        bookingFee: fullData.booking_fee || 0,
+        staff: fullData.staff || [],
+        hours: formattedHours, // Use the translated hours
         policies: {
+          // If you stored policies as a JSON string, parse it. 
+          // If stored as separate columns, map them:
           cancellation: fullData.cancellation_policy || "Standard 24h cancellation",
           deposit: fullData.deposit_required ? "Deposit Required" : "No deposit required",
           lateArrival: "15 min grace period"
         },
+        // Ensure images act as a fallback array
         gallery: [
             getImageUrl(fullData.cover_photo_path), 
             getImageUrl(fullData.logo_path)
-        ].filter(Boolean)
+        ].filter((src): src is string => Boolean(src)),
+        
+        // Safety for arrays
+        badges: fullData.badges || [], 
       });
-      
+
+      // 5. Update Services State
       setSelectedServices(fullData.services || []);
+      
+      // 6. Navigate
       setCurrentPage('business-profile');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      window.scrollTo(0, 0);
+
     } catch (err) {
-      toast.error("Could not load business details");
-      console.error(err);
+      console.error("CRITICAL ERROR:", err);
+      // Even if it fails, go to the page so you aren't stuck, 
+      // but it will likely be empty. Check Console (F12) to see the error.
+      setSelectedBusiness(business);
+      setCurrentPage('business-profile');
     }
   };
 
@@ -226,6 +267,7 @@ export default function App() {
         const payload = {
           merchant_id: selectedBusiness.id,
           service_id: finalData.service.id,
+          staff_id: finalData.staffId, // <--- Add this line
           customer_name: finalData.name,
           customer_phone: finalData.phone,
           customer_email: finalData.email,
@@ -281,9 +323,10 @@ export default function App() {
           <BusinessProfile
             business={selectedBusiness}
             services={selectedServices}
-            reviews={[]} 
+            reviews={reviews}  // <--- Pass the real state
             onStartBooking={handleStartBooking}
             onWhatsAppClick={() => {}}
+            onNavigate={handleNavigate} // <--- Add this line
           />
           <Footer />
         </>

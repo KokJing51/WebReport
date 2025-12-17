@@ -21,6 +21,7 @@ interface LayoutProps {
   currentPage: string;
   onNavigate: (page: string) => void;
   onLogout: () => void;
+  user?: any;
 }
 
 const navigationItems = [
@@ -38,8 +39,28 @@ export function Layout({
   currentPage,
   onNavigate,
   onLogout,
+  user,
 }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  
+  // Get user initials for avatar
+  const getUserInitials = () => {
+    if (user?.email) {
+      return user.email.substring(0, 2).toUpperCase();
+    }
+    if (user?.business_name) {
+      return user.business_name.substring(0, 2).toUpperCase();
+    }
+    return 'U';
+  };
+  
+  const getUserName = () => {
+    return user?.business_name || user?.email?.split('@')[0] || 'User';
+  };
+  
+  const getUserRole = () => {
+    return user?.business_name ? 'Business Owner' : 'User';
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -108,13 +129,13 @@ export function Layout({
           {/* User section */}
           <div className="p-4 border-t border-sidebar-border">
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-                <Users className="h-4 w-4 text-primary-foreground" />
+              <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-primary-foreground text-xs font-semibold">
+                {getUserInitials()}
               </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium">John Doe</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{getUserName()}</p>
                 <p className="text-xs text-muted-foreground">
-                  Salon Owner
+                  {getUserRole()}
                 </p>
               </div>
             </div>

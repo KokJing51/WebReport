@@ -5,6 +5,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Separator } from '../ui/separator';
+// UI Imports
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '../ui/dialog';
+import { Input } from '../ui/input';
+import { Textarea } from '../ui/textarea';
+import { Label } from '../ui/label';
+
 import {
   Star,
   MapPin,
@@ -15,7 +21,15 @@ import {
   Heart,
   CheckCircle,
   Info,
+  Users
 } from 'lucide-react';
+
+// Helper to fix image URLs
+const getImageUrl = (path: string) => {
+  if (!path) return null;
+  if (path.startsWith('http')) return path;
+  return `http://localhost:5000/${path.replace(/\\/g, '/')}`;
+};
 
 interface BusinessProfileProps {
   business: Business;
@@ -23,6 +37,7 @@ interface BusinessProfileProps {
   reviews: Review[];
   onStartBooking: (bookingData: any) => void;
   onWhatsAppClick: () => void;
+  onNavigate: (page: string) => void;
 }
 
 export function BusinessProfile({
@@ -31,8 +46,56 @@ export function BusinessProfile({
   reviews,
   onStartBooking,
   onWhatsAppClick,
+  onNavigate,
 }: BusinessProfileProps) {
   const [activeTab, setActiveTab] = useState('about');
+  
+  // --- REVIEW LOGIC ---
+  const [isReviewOpen, setIsReviewOpen] = useState(false);
+  const [newReview, setNewReview] = useState({ name: '', rating: 5, comment: '' });
+  const [localReviews, setLocalReviews] = useState<Review[]>([]); 
+
+  const handleSubmitReview = async () => {
+    if (!newReview.name || !newReview.comment) return;
+
+    try {
+      const res = await fetch('http://localhost:5000/api/reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          merchant_id: business.id,
+          customer_name: newReview.name,
+          rating: newReview.rating,
+          comment: newReview.comment
+        })
+      });
+
+      if (res.ok) {
+        // Add to local list immediately
+        const addedReview: Review = {
+            id: Date.now().toString(),
+            customerName: newReview.name,
+            rating: newReview.rating,
+            comment: newReview.comment,
+            date: new Date(),
+            verified: false
+        };
+        setLocalReviews([addedReview, ...localReviews]);
+        setIsReviewOpen(false); 
+        setNewReview({ name: '', rating: 5, comment: '' });
+      }
+    } catch (err) {
+      console.error("Failed to submit review", err);
+    }
+  };
+  
+  // SAFETY: Ensure arrays exist before using them
+  const safeReviews = reviews || [];
+  const allReviews = [...localReviews, ...safeReviews];
+  const safeBadges = business.badges || []; // <--- Fixes the White Screen
+  const safeGallery = business.gallery || [];
+  const safeStaff = business.staff || [];
+  const safePolicies = business.policies || { cancellation: '', deposit: '', lateArrival: '' };
 
   const getPriceRange = (level: number) => '$'.repeat(level);
 
@@ -43,10 +106,18 @@ export function BusinessProfile({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {/* Breadcrumb */}
           <div className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)] mb-6">
-            <span className="cursor-pointer hover:text-[var(--color-text-primary)]">Home</span>
+            <span 
+              className="cursor-pointer hover:text-[var(--color-text-primary)]"
+              onClick={() => onNavigate('home')}
+            >
+              Home
+            </span>
             <span>/</span>
-            <span className="cursor-pointer hover:text-[var(--color-text-primary)] capitalize">
-              {business.category}
+            <span 
+              className="cursor-pointer hover:text-[var(--color-text-primary)] capitalize"
+              onClick={() => onNavigate('browse')}
+            >
+              Browse
             </span>
             <span>/</span>
             <span className="text-[var(--color-text-primary)]">{business.name}</span>
@@ -91,7 +162,7 @@ export function BusinessProfile({
                 </div>
               </div>
 
-              {/* Badges */}
+              {/* Badges (Fixed: Uses safeBadges) */}
               <div className="flex flex-wrap gap-2 mb-6">
                 {business.whatsappEnabled && (
                   <Badge className="bg-[var(--color-accent-whatsapp)] text-white border-none">
@@ -105,7 +176,7 @@ export function BusinessProfile({
                     Instant Confirm
                   </Badge>
                 )}
-                {business.badges.includes('Free Cancellation') && (
+                {safeBadges.includes('Free Cancellation') && (
                   <Badge variant="outline">Free Cancellation</Badge>
                 )}
               </div>
@@ -130,10 +201,10 @@ export function BusinessProfile({
               </div>
             </div>
 
-            {/* Right: Image Gallery Preview */}
+            {/* Right: Image Gallery Preview (Fixed: Uses safeGallery) */}
             <div className="lg:w-96">
               <div className="grid grid-cols-2 gap-2">
-                {business.gallery.slice(0, 4).map((image, index) => (
+                {safeGallery.slice(0, 4).map((image, index) => (
                   <div
                     key={index}
                     className="aspect-square rounded-xl overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
@@ -160,6 +231,7 @@ export function BusinessProfile({
               <TabsList className="w-full justify-start mb-8">
                 <TabsTrigger value="about">About</TabsTrigger>
                 <TabsTrigger value="services">Services</TabsTrigger>
+                <TabsTrigger value="team">Our Team</TabsTrigger>
                 <TabsTrigger value="policies">Policies</TabsTrigger>
                 <TabsTrigger value="reviews">Reviews</TabsTrigger>
               </TabsList>
@@ -224,9 +296,6 @@ export function BusinessProfile({
                             <Clock className="w-4 h-4" />
                             <span>{service.duration} min</span>
                           </div>
-                          {service.staff && service.staff.length > 0 && (
-                            <span>Staff: {service.staff.join(', ')}</span>
-                          )}
                         </div>
                       </div>
                     ))}
@@ -234,7 +303,41 @@ export function BusinessProfile({
                 </div>
               </TabsContent>
 
-              {/* Policies Tab */}
+              {/* Team Tab (Fixed: Uses safeStaff) */}
+              <TabsContent value="team">
+                <div className="bg-white rounded-2xl p-8 shadow-soft">
+                  <h4 className="mb-6">Meet Our Team</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {safeStaff.length > 0 ? (
+                      safeStaff.map((member: any) => (
+                        <div key={member.id} className="flex items-start gap-4 p-4 border rounded-xl">
+                           <div className="w-16 h-16 rounded-full overflow-hidden bg-gray-100 flex-shrink-0">
+                             {member.photo_path ? (
+                               <img 
+                                 src={getImageUrl(member.photo_path) || ''} 
+                                 alt={member.name} 
+                                 className="w-full h-full object-cover"
+                               />
+                             ) : (
+                               <div className="w-full h-full flex items-center justify-center text-gray-400">
+                                 <Users className="w-8 h-8" />
+                               </div>
+                             )}
+                           </div>
+                           <div>
+                             <h5 className="font-medium">{member.name}</h5>
+                             <p className="text-sm text-[var(--color-text-secondary)] mt-1">{member.bio}</p>
+                           </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-[var(--color-text-secondary)]">No team members listed.</p>
+                    )}
+                  </div>
+                </div>
+              </TabsContent>
+
+              {/* Policies Tab (Fixed: Uses safePolicies) */}
               <TabsContent value="policies">
                 <div className="bg-white rounded-2xl p-8 shadow-soft">
                   <h4 className="mb-6">Things to Know Before Booking</h4>
@@ -245,7 +348,7 @@ export function BusinessProfile({
                         <h6>Cancellation Policy</h6>
                       </div>
                       <p className="text-[var(--color-text-secondary)]">
-                        {business.policies.cancellation}
+                        {safePolicies.cancellation}
                       </p>
                     </div>
                     <Separator />
@@ -255,7 +358,7 @@ export function BusinessProfile({
                         <h6>Deposit Requirements</h6>
                       </div>
                       <p className="text-[var(--color-text-secondary)]">
-                        {business.policies.deposit}
+                        {safePolicies.deposit}
                       </p>
                     </div>
                     <Separator />
@@ -265,7 +368,7 @@ export function BusinessProfile({
                         <h6>Late Arrival</h6>
                       </div>
                       <p className="text-[var(--color-text-secondary)]">
-                        {business.policies.lateArrival}
+                        {safePolicies.lateArrival}
                       </p>
                     </div>
                   </div>
@@ -277,16 +380,73 @@ export function BusinessProfile({
                 <div className="bg-white rounded-2xl p-8 shadow-soft">
                   <div className="flex items-center justify-between mb-6">
                     <h4>Customer Reviews</h4>
-                    <Button variant="outline">Write a Review</Button>
+                    
+                    {/* Write Review Modal */}
+                    <Dialog open={isReviewOpen} onOpenChange={setIsReviewOpen}>
+                      <DialogTrigger asChild>
+                        <Button variant="outline">Write a Review</Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Write a Review for {business.name}</DialogTitle>
+                        </DialogHeader>
+                        
+                        <div className="space-y-4 py-4">
+                          <div className="space-y-2">
+                            <Label>Your Name</Label>
+                            <Input 
+                              placeholder="John Doe" 
+                              value={newReview.name}
+                              onChange={(e) => setNewReview({...newReview, name: e.target.value})}
+                            />
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <Label>Rating</Label>
+                            <div className="flex gap-2">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <button 
+                                  key={star}
+                                  onClick={() => setNewReview({...newReview, rating: star})}
+                                  className="focus:outline-none transition-transform hover:scale-110"
+                                >
+                                  <Star 
+                                    className={`w-8 h-8 ${
+                                      star <= newReview.rating 
+                                        ? 'fill-yellow-400 text-yellow-400' 
+                                        : 'text-gray-300'
+                                    }`} 
+                                  />
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label>Your Review</Label>
+                            <Textarea 
+                              placeholder="Tell us about your experience..." 
+                              value={newReview.comment}
+                              onChange={(e) => setNewReview({...newReview, comment: e.target.value})}
+                              rows={4}
+                            />
+                          </div>
+                        </div>
+
+                        <DialogFooter>
+                          <Button onClick={handleSubmitReview}>Submit Review</Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
                   </div>
 
                   <div className="space-y-6">
-                    {reviews.map((review) => (
+                    {allReviews.map((review) => (
                       <div key={review.id} className="border-b border-[var(--color-border)] pb-6 last:border-0">
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-[var(--color-secondary)]20 flex items-center justify-center">
-                              <span>{review.customerName[0]}</span>
+                              <span>{review.customerName ? review.customerName[0] : '?'}</span>
                             </div>
                             <div>
                               <div className="flex items-center gap-2">
@@ -308,7 +468,7 @@ export function BusinessProfile({
                                   ))}
                                 </div>
                                 <span>•</span>
-                                <span>{review.date.toLocaleDateString()}</span>
+                                <span>{review.date instanceof Date ? review.date.toLocaleDateString() : 'Recent'}</span>
                               </div>
                             </div>
                           </div>
@@ -316,6 +476,9 @@ export function BusinessProfile({
                         <p className="text-[var(--color-text-secondary)]">{review.comment}</p>
                       </div>
                     ))}
+                    {allReviews.length === 0 && (
+                        <p className="text-center text-gray-500 py-4">No reviews yet. Be the first to write one!</p>
+                    )}
                   </div>
                 </div>
               </TabsContent>
@@ -323,14 +486,14 @@ export function BusinessProfile({
           </div>
 
           {/* Right: Booking Widget */}
-      <div className="lg:w-96">
-        <BookingWidget
-          services={services}
-          business={business}
-          onContinue={onStartBooking}
-          isSticky
-        />
-      </div>
+          <div className="lg:w-96">
+            <BookingWidget
+              services={services}
+              business={business}
+              onContinue={onStartBooking}
+              isSticky
+            />
+          </div>
         </div>
       </div>
     </div>

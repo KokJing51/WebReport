@@ -1,10 +1,13 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
+import { Label } from '../ui/label';
+import { Textarea } from '../ui/textarea';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -16,13 +19,17 @@ import {
   Edit,
   Trash2,
   Clock,
-  Users
+  Users,
+  X
 } from 'lucide-react';
 import { Input } from '../ui/input';
 import { cn } from '../ui/utils';
+import { apiService } from '../../services/api';
+import { toast } from 'sonner';
 
 interface CalendarPageProps {
   onNavigate: (page: string) => void;
+  user?: any;
 }
 
 interface TimeSlot {
@@ -32,6 +39,7 @@ interface TimeSlot {
   customer?: string;
   service?: string;
   staff?: string;
+  bookingId?: number; // Store booking ID for easy lookup
 }
 
 interface DayData {
@@ -41,250 +49,35 @@ interface DayData {
 }
 
 interface BookingEvent {
+  id?: number;
   title: string;
   start: string;
   end: string;
   backgroundColor: string;
+  customer_name?: string;
+  service_name?: string;
+  booking_date?: string;
+  booking_time?: string;
+  status?: string;
 }
 
-// Actual booking data from the system
-const bookingEvents: BookingEvent[] = [
-  {
-    title: 'Haircut - Sarah Johnson',
-    start: '2025-11-15T10:00:00',
-    end: '2025-11-15T11:00:00',
-    backgroundColor: '#0d6efd'
-  },
-  {
-    title: 'Hair Coloring - Mike Chen',
-    start: '2025-11-15T14:00:00',
-    end: '2025-11-15T16:00:00',
-    backgroundColor: '#198754'
-  },
-  {
-    title: 'Beard Trim - David Lee',
-    start: '2025-11-16T09:30:00',
-    end: '2025-11-16T10:00:00',
-    backgroundColor: '#ffc107'
-  },
-  {
-    title: 'Haircut & Style - Emma Wilson',
-    start: '2025-11-16T11:00:00',
-    end: '2025-11-16T12:00:00',
-    backgroundColor: '#0d6efd'
-  },
-  {
-    title: 'Deep Conditioning - Lisa Brown',
-    start: '2025-11-17T13:00:00',
-    end: '2025-11-17T14:30:00',
-    backgroundColor: '#6f42c1'
-  },
-  {
-    title: 'Haircut - James Taylor',
-    start: '2025-11-18T10:00:00',
-    end: '2025-11-18T11:00:00',
-    backgroundColor: '#0d6efd'
-  },
-  {
-    title: 'Hair Coloring - Anna Martinez',
-    start: '2025-11-18T15:00:00',
-    end: '2025-11-18T17:00:00',
-    backgroundColor: '#198754'
-  },
-  {
-    title: 'Beard Trim - Robert Davis',
-    start: '2025-11-19T09:00:00',
-    end: '2025-11-19T09:30:00',
-    backgroundColor: '#ffc107'
-  },
-  {
-    title: 'Haircut & Style - Jennifer White',
-    start: '2025-11-19T14:00:00',
-    end: '2025-11-19T15:00:00',
-    backgroundColor: '#0d6efd'
-  },
-  {
-    title: 'Deep Conditioning - Maria Garcia',
-    start: '2025-11-20T11:00:00',
-    end: '2025-11-20T12:30:00',
-    backgroundColor: '#6f42c1'
-  },
-  {
-    title: 'Hair Coloring - Patricia Johnson',
-    start: '2025-11-21T13:00:00',
-    end: '2025-11-21T15:00:00',
-    backgroundColor: '#198754'
-  },
-  {
-    title: 'Haircut - Kevin Anderson',
-    start: '2025-11-21T16:00:00',
-    end: '2025-11-21T17:00:00',
-    backgroundColor: '#0d6efd'
-  },
-  {
-    title: 'Beard Trim - Thomas Moore',
-    start: '2025-11-22T10:30:00',
-    end: '2025-11-22T11:00:00',
-    backgroundColor: '#ffc107'
-  },
-  {
-    title: 'Haircut & Style - Nancy Williams',
-    start: '2025-11-22T14:00:00',
-    end: '2025-11-22T15:00:00',
-    backgroundColor: '#0d6efd'
-  },
-  {
-    title: 'Hair Coloring - Sandra Martinez',
-    start: '2025-11-25T10:00:00',
-    end: '2025-11-25T12:00:00',
-    backgroundColor: '#198754'
-  },
-  {
-    title: 'Deep Conditioning - Betty Harris',
-    start: '2025-11-25T15:00:00',
-    end: '2025-11-25T16:30:00',
-    backgroundColor: '#6f42c1'
-  },
-  {
-    title: 'Haircut - Charles Clark',
-    start: '2025-11-26T11:00:00',
-    end: '2025-11-26T12:00:00',
-    backgroundColor: '#0d6efd'
-  },
-  {
-    title: 'Beard Trim - Daniel Lewis',
-    start: '2025-11-27T09:00:00',
-    end: '2025-11-27T09:30:00',
-    backgroundColor: '#ffc107'
-  },
-  {
-    title: 'Hair Coloring - Susan Walker',
-    start: '2025-11-27T14:00:00',
-    end: '2025-11-27T16:00:00',
-    backgroundColor: '#198754'
-  },
-  {
-    title: 'Haircut & Style - Steven Hall',
-    start: '2025-11-28T10:00:00',
-    end: '2025-11-28T11:00:00',
-    backgroundColor: '#0d6efd'
-  },
-  // Additional bookings for busy days (4+ bookings)
-  {
-    title: 'Haircut - Rachel Green',
-    start: '2025-11-18T09:00:00',
-    end: '2025-11-18T10:00:00',
-    backgroundColor: '#0d6efd'
-  },
-  {
-    title: 'Manicure - Monica Geller',
-    start: '2025-11-18T11:30:00',
-    end: '2025-11-18T12:30:00',
-    backgroundColor: '#dc3545'
-  },
-  {
-    title: 'Facial Treatment - Phoebe Buffay',
-    start: '2025-11-18T13:00:00',
-    end: '2025-11-18T14:00:00',
-    backgroundColor: '#6f42c1'
-  },
-  {
-    title: 'Haircut - Ross Geller',
-    start: '2025-11-22T09:00:00',
-    end: '2025-11-22T10:00:00',
-    backgroundColor: '#0d6efd'
-  },
-  {
-    title: 'Hair Styling - Chandler Bing',
-    start: '2025-11-22T11:30:00',
-    end: '2025-11-22T12:30:00',
-    backgroundColor: '#198754'
-  },
-  {
-    title: 'Massage Therapy - Joey Tribbiani',
-    start: '2025-11-22T15:30:00',
-    end: '2025-11-22T17:00:00',
-    backgroundColor: '#6f42c1'
-  },
-  {
-    title: 'Haircut - Emily Watson',
-    start: '2025-11-25T09:00:00',
-    end: '2025-11-25T10:00:00',
-    backgroundColor: '#0d6efd'
-  },
-  {
-    title: 'Nail Art - Olivia Brown',
-    start: '2025-11-25T13:00:00',
-    end: '2025-11-25T14:00:00',
-    backgroundColor: '#dc3545'
-  },
-  {
-    title: 'Pedicure - Sophia Davis',
-    start: '2025-11-25T17:00:00',
-    end: '2025-11-25T18:00:00',
-    backgroundColor: '#dc3545'
-  },
-  {
-    title: 'Haircut - Liam Wilson',
-    start: '2025-11-26T09:00:00',
-    end: '2025-11-26T10:00:00',
-    backgroundColor: '#0d6efd'
-  },
-  {
-    title: 'Hair Treatment - Noah Miller',
-    start: '2025-11-26T13:00:00',
-    end: '2025-11-26T14:30:00',
-    backgroundColor: '#198754'
-  },
-  {
-    title: 'Beard Styling - Ethan Moore',
-    start: '2025-11-26T15:00:00',
-    end: '2025-11-26T16:00:00',
-    backgroundColor: '#ffc107'
-  },
-  {
-    title: 'Massage - Ava Taylor',
-    start: '2025-11-26T17:00:00',
-    end: '2025-11-26T18:30:00',
-    backgroundColor: '#6f42c1'
-  },
-  {
-    title: 'Haircut - Isabella Anderson',
-    start: '2025-11-19T10:00:00',
-    end: '2025-11-19T11:00:00',
-    backgroundColor: '#0d6efd'
-  },
-  {
-    title: 'Hair Coloring - Mia Thomas',
-    start: '2025-11-19T11:30:00',
-    end: '2025-11-19T13:00:00',
-    backgroundColor: '#198754'
-  },
-  {
-    title: 'Facial - Charlotte Jackson',
-    start: '2025-11-19T16:00:00',
-    end: '2025-11-19T17:00:00',
-    backgroundColor: '#6f42c1'
-  },
-  {
-    title: 'Haircut - Amelia White',
-    start: '2025-11-21T09:00:00',
-    end: '2025-11-21T10:00:00',
-    backgroundColor: '#0d6efd'
-  },
-  {
-    title: 'Styling - Harper Harris',
-    start: '2025-11-21T10:30:00',
-    end: '2025-11-21T11:30:00',
-    backgroundColor: '#198754'
-  },
-  {
-    title: 'Manicure - Evelyn Martin',
-    start: '2025-11-21T17:30:00',
-    end: '2025-11-21T18:30:00',
-    backgroundColor: '#dc3545'
-  }
-];
+interface Booking {
+  id: number;
+  merchant_id: number;
+  service_id?: number;
+  staff_id?: number;
+  customer_name: string;
+  customer_phone: string;
+  customer_email?: string;
+  booking_date: string;
+  booking_time: string;
+  party_size: number;
+  total_price?: number;
+  notes?: string;
+  status: string;
+  service_name?: string;
+  staff_name?: string;
+}
 
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -316,7 +109,7 @@ const getStatusLabel = (status: string) => {
   }
 };
 
-export function CalendarPage({ onNavigate }: CalendarPageProps) {
+export function CalendarPage({ onNavigate, user }: CalendarPageProps) {
   const fadeInUp = {
     hidden: { opacity: 0, y: 30 },
     visible: { 
@@ -336,10 +129,121 @@ export function CalendarPage({ onNavigate }: CalendarPageProps) {
     }
   };
 
-  const [currentDate, setCurrentDate] = useState(new Date(2025, 10, 18)); // November 18, 2025
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState('week');
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
   const [selectedDayBookings, setSelectedDayBookings] = useState<{ date: string; bookings: BookingEvent[] } | null>(null);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showAddBooking, setShowAddBooking] = useState(false);
+  const [showEditBooking, setShowEditBooking] = useState(false);
+  const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
+  const [newBooking, setNewBooking] = useState({
+    customer_name: '',
+    customer_phone: '',
+    customer_email: '',
+    booking_date: '',
+    booking_time: '',
+    service_id: '',
+    staff_id: '',
+    party_size: 1,
+    total_price: '',
+    notes: ''
+  });
+  const [services, setServices] = useState<any[]>([]);
+  const [staff, setStaff] = useState<any[]>([]);
+
+  // Fetch bookings, services, and staff
+  useEffect(() => {
+    if (user) {
+      const merchantId = user.merchant_id || user.id;
+      if (merchantId) {
+        fetchBookings();
+        fetchServicesAndStaff(merchantId);
+      }
+    }
+  }, [user, currentDate, viewMode]);
+
+  const fetchServicesAndStaff = async (merchantId: number) => {
+    try {
+      const [servicesData, staffData] = await Promise.all([
+        apiService.getServices(merchantId),
+        apiService.getStaff(merchantId)
+      ]);
+      setServices(servicesData || []);
+      setStaff(staffData || []);
+    } catch (error: any) {
+      console.error('Failed to fetch services/staff:', error);
+      // Don't show error toast - services/staff are optional
+    }
+  };
+
+  const fetchBookings = async () => {
+    if (!user) return;
+    
+    // Use merchant_id if available, otherwise use user id
+    const merchantId = user.merchant_id || user.id;
+    if (!merchantId) {
+      console.warn('No merchant_id or user id found');
+      return;
+    }
+    
+    setIsLoading(true);
+    try {
+      const startDate = new Date(currentDate);
+      const endDate = new Date(currentDate);
+      
+      if (viewMode === 'week') {
+        startDate.setDate(currentDate.getDate() - currentDate.getDay());
+        endDate.setDate(startDate.getDate() + 6);
+      } else if (viewMode === 'month') {
+        startDate.setDate(1);
+        endDate.setMonth(currentDate.getMonth() + 1);
+        endDate.setDate(0);
+      } else {
+        // day view
+        endDate.setDate(currentDate.getDate() + 1);
+      }
+
+      const data = await apiService.getBookings({
+        merchant_id: merchantId,
+        start_date: startDate.toISOString().split('T')[0],
+        end_date: endDate.toISOString().split('T')[0]
+      });
+      
+      setBookings(data || []);
+    } catch (error: any) {
+      toast.error('Failed to fetch bookings');
+      console.error(error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Convert bookings to BookingEvent format
+  const bookingEvents: BookingEvent[] = useMemo(() => {
+    return bookings.map(booking => {
+      const [hours, minutes] = booking.booking_time.split(':').map(Number);
+      const date = new Date(booking.booking_date);
+      date.setHours(hours, minutes || 0);
+      
+      const endDate = new Date(date);
+      endDate.setHours(date.getHours() + 1); // Default 1 hour duration
+      
+      return {
+        id: booking.id,
+        title: `${booking.service_name || 'Service'} - ${booking.customer_name}`,
+        start: date.toISOString(),
+        end: endDate.toISOString(),
+        backgroundColor: booking.status === 'cancelled' ? '#dc3545' : '#0d6efd',
+        customer_name: booking.customer_name,
+        service_name: booking.service_name,
+        booking_date: booking.booking_date,
+        booking_time: booking.booking_time,
+        status: booking.status
+      };
+    });
+  }, [bookings]);
 
   // Parse booking title to extract service and customer
   const parseBookingTitle = (title: string): { service: string; customer: string } => {
@@ -374,33 +278,35 @@ export function CalendarPage({ onNavigate }: CalendarPageProps) {
         // Check if there's a booking for this slot
         const booking = bookingEvents.find(event => {
           const eventStart = new Date(event.start);
-          return eventStart.getFullYear() === dayDate.getFullYear() &&
-                 eventStart.getMonth() === dayDate.getMonth() &&
-                 eventStart.getDate() === dayDate.getDate() &&
-                 eventStart.getHours() === hour;
+          const eventDateStr = eventStart.toISOString().split('T')[0];
+          return eventDateStr === dateStr && eventStart.getHours() === hour;
         });
         
         if (booking) {
-          const { service, customer } = parseBookingTitle(booking.title);
-          slots.push({
-            id: `${dateStr}-${hour}`,
-            time: timeStr,
-            status: 'booked',
-            customer,
-            service,
-            staff: 'Emma'
+          // Also find the actual booking from bookings array to get the real ID
+          const actualBooking = bookings.find(b => {
+            if (booking.id && b.id === booking.id) return true;
+            // Fallback matching
+            return b.customer_name === booking.customer_name && 
+                   b.booking_date === dateStr &&
+                   b.booking_time.startsWith(`${hour.toString().padStart(2, '0')}:`);
           });
-        } else {
-          // Random status for empty slots to simulate real calendar
-          const randomStatus = Math.random();
-          let status: 'open' | 'hold' | 'cancelled' = 'open';
-          if (randomStatus > 0.9) status = 'hold';
-          else if (randomStatus > 0.85) status = 'cancelled';
           
           slots.push({
             id: `${dateStr}-${hour}`,
             time: timeStr,
-            status
+            status: booking.status === 'cancelled' ? 'cancelled' : 'booked',
+            customer: booking.customer_name,
+            service: booking.service_name || 'Service',
+            staff: 'Staff',
+            bookingId: actualBooking?.id || booking.id // Use actual booking ID if available
+          });
+        } else {
+          // All empty slots are open
+          slots.push({
+            id: `${dateStr}-${hour}`,
+            time: timeStr,
+            status: 'open'
           });
         }
       }
@@ -413,7 +319,7 @@ export function CalendarPage({ onNavigate }: CalendarPageProps) {
     }
     
     return weekDays;
-  }, [currentDate]);
+  }, [currentDate, bookingEvents]);
 
   // Calculate month view data
   const monthData = useMemo(() => {
@@ -443,7 +349,7 @@ export function CalendarPage({ onNavigate }: CalendarPageProps) {
     }
     
     return days;
-  }, [currentDate]);
+  }, [currentDate, bookingEvents]);
 
   // Get heatmap color based on booking count
   const getHeatmapColor = (bookings: number): string => {
@@ -917,7 +823,21 @@ export function CalendarPage({ onNavigate }: CalendarPageProps) {
             <Eye className="h-4 w-4 mr-2" />
             View All Bookings
           </Button>
-          <Button>
+          <Button onClick={() => {
+            const today = new Date();
+            setNewBooking({
+              customer_name: '',
+              customer_phone: '',
+              customer_email: '',
+              booking_date: today.toISOString().split('T')[0],
+              booking_time: '10:00',
+              service_id: '',
+              party_size: 1,
+              total_price: '',
+              notes: ''
+            });
+            setShowAddBooking(true);
+          }}>
             <Plus className="h-4 w-4 mr-2" />
             Add Booking
           </Button>
@@ -1032,19 +952,132 @@ export function CalendarPage({ onNavigate }: CalendarPageProps) {
 
               <div className="flex gap-2 pt-4">
                 {selectedSlot.status === 'open' && (
-                  <Button size="sm" className="flex-1">
+                  <Button 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => {
+                      const [date, hour] = selectedSlot.id.split('-');
+                      const hourNum = parseInt(hour);
+                      const time24 = `${hourNum.toString().padStart(2, '0')}:00`;
+                      setNewBooking({
+                        customer_name: '',
+                        customer_phone: '',
+                        customer_email: '',
+                        booking_date: date,
+                        booking_time: time24,
+                        service_id: '',
+                        party_size: 1,
+                        total_price: '',
+                        notes: ''
+                      });
+                      setShowAddBooking(true);
+                      setSelectedSlot(null);
+                    }}
+                  >
                     <Plus className="h-4 w-4 mr-2" />
                     Book Slot
                   </Button>
                 )}
                 
-                {selectedSlot.status !== 'open' && (
+                {selectedSlot.status !== 'open' && selectedSlot.customer && (
                   <>
-                    <Button size="sm" variant="outline" className="flex-1">
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      className="flex-1"
+                      onClick={() => {
+                        // Try to find booking by ID first (most reliable)
+                        let booking = selectedSlot.bookingId 
+                          ? bookings.find(b => b.id === selectedSlot.bookingId)
+                          : null;
+                        
+                        // Fallback: find by date and time
+                        if (!booking) {
+                          const [date, hour] = selectedSlot.id.split('-');
+                          booking = bookings.find(b => {
+                            const bookingDate = b.booking_date;
+                            const [bookingHours] = b.booking_time.split(':').map(Number);
+                            return bookingDate === date && bookingHours === parseInt(hour);
+                          });
+                        }
+                        
+                        // Additional fallback: find by customer name and date
+                        if (!booking && selectedSlot.customer) {
+                          const [date] = selectedSlot.id.split('-');
+                          booking = bookings.find(b => 
+                            b.customer_name === selectedSlot.customer && 
+                            b.booking_date === date
+                          );
+                        }
+                        
+                        if (booking) {
+                          setEditingBooking(booking);
+                          setShowEditBooking(true);
+                          setSelectedSlot(null);
+                        } else {
+                          console.error('Booking lookup failed:', {
+                            slotId: selectedSlot.id,
+                            bookingId: selectedSlot.bookingId,
+                            customer: selectedSlot.customer,
+                            bookingsCount: bookings.length,
+                            bookings: bookings.map(b => ({ id: b.id, date: b.booking_date, time: b.booking_time, customer: b.customer_name }))
+                          });
+                          toast.error('Booking not found');
+                        }
+                      }}
+                    >
                       <Edit className="h-4 w-4 mr-2" />
                       Edit
                     </Button>
-                    <Button size="sm" variant="outline" className="flex-1">
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      className="flex-1"
+                      onClick={async () => {
+                        // Try to find booking by ID first (most reliable)
+                        let booking = selectedSlot.bookingId 
+                          ? bookings.find(b => b.id === selectedSlot.bookingId)
+                          : null;
+                        
+                        // Fallback: find by date and time
+                        if (!booking) {
+                          const [date, hour] = selectedSlot.id.split('-');
+                          booking = bookings.find(b => {
+                            const bookingDate = b.booking_date;
+                            const [bookingHours] = b.booking_time.split(':').map(Number);
+                            return bookingDate === date && bookingHours === parseInt(hour);
+                          });
+                        }
+                        
+                        // Additional fallback: find by customer name and date
+                        if (!booking && selectedSlot.customer) {
+                          const [date] = selectedSlot.id.split('-');
+                          booking = bookings.find(b => 
+                            b.customer_name === selectedSlot.customer && 
+                            b.booking_date === date
+                          );
+                        }
+                        
+                        if (booking && confirm('Are you sure you want to cancel this booking?')) {
+                          try {
+                            await apiService.cancelBooking(booking.id);
+                            toast.success('Booking cancelled');
+                            fetchBookings();
+                            setSelectedSlot(null);
+                          } catch (error: any) {
+                            toast.error(error.message || 'Failed to cancel booking');
+                          }
+                        } else if (!booking) {
+                          console.error('Booking lookup failed for cancel:', {
+                            slotId: selectedSlot.id,
+                            bookingId: selectedSlot.bookingId,
+                            customer: selectedSlot.customer,
+                            bookingsCount: bookings.length
+                          });
+                          toast.error('Booking not found');
+                        }
+                      }}
+                    >
                       <Trash2 className="h-4 w-4 mr-2" />
                       Cancel
                     </Button>
@@ -1115,16 +1148,30 @@ export function CalendarPage({ onNavigate }: CalendarPageProps) {
             </CardHeader>
             <CardContent className="overflow-y-auto p-6" style={{ maxHeight: '400px' }}>
               <div className="space-y-3">
-                {selectedDayBookings.bookings.map((booking, index) => {
-                  const { service, customer } = parseBookingTitle(booking.title);
-                  const startTime = new Date(booking.start);
-                  const endTime = new Date(booking.end);
+                {selectedDayBookings.bookings.map((bookingEvent, index) => {
+                  const { service, customer } = parseBookingTitle(bookingEvent.title);
+                  const startTime = new Date(bookingEvent.start);
+                  const endTime = new Date(bookingEvent.end);
+                  
+                  // Find the actual booking from the bookings array
+                  const actualBooking = bookings.find(b => {
+                    // Match by ID first (most reliable)
+                    if (b.id === bookingEvent.id) return true;
+                    // Fallback: match by customer name, date, and time
+                    const eventStart = new Date(bookingEvent.start);
+                    const eventDateStr = eventStart.toISOString().split('T')[0];
+                    const eventHours = eventStart.getHours();
+                    const [bookingHours] = b.booking_time.split(':').map(Number);
+                    return b.customer_name === customer && 
+                           b.booking_date === eventDateStr &&
+                           bookingHours === eventHours;
+                  });
                   
                   return (
                     <div
                       key={index}
                       className="p-4 border rounded-lg hover:bg-muted/50 transition-colors"
-                      style={{ borderLeftWidth: '4px', borderLeftColor: booking.backgroundColor }}
+                      style={{ borderLeftWidth: '4px', borderLeftColor: bookingEvent.backgroundColor }}
                     >
                       <div className="flex items-start justify-between mb-2">
                         <div>
@@ -1133,13 +1180,13 @@ export function CalendarPage({ onNavigate }: CalendarPageProps) {
                         </div>
                         <Badge 
                           style={{ 
-                            backgroundColor: booking.backgroundColor + '20',
-                            color: booking.backgroundColor,
-                            borderColor: booking.backgroundColor
+                            backgroundColor: bookingEvent.backgroundColor + '20',
+                            color: bookingEvent.backgroundColor,
+                            borderColor: bookingEvent.backgroundColor
                           }}
                           className="border"
                         >
-                          Confirmed
+                          {actualBooking?.status || 'Confirmed'}
                         </Badge>
                       </div>
                       
@@ -1159,18 +1206,42 @@ export function CalendarPage({ onNavigate }: CalendarPageProps) {
                       </div>
                       
                       <div className="flex gap-2 mt-3">
-                        <Button size="sm" variant="outline" className="h-7 text-xs">
-                          <Eye className="h-3 w-3 mr-1" />
-                          View
-                        </Button>
-                        <Button size="sm" variant="outline" className="h-7 text-xs">
-                          <Edit className="h-3 w-3 mr-1" />
-                          Edit
-                        </Button>
-                        <Button size="sm" variant="outline" className="h-7 text-xs">
-                          <Trash2 className="h-3 w-3 mr-1" />
-                          Cancel
-                        </Button>
+                        {actualBooking && (
+                          <>
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="h-7 text-xs"
+                              onClick={() => {
+                                setEditingBooking(actualBooking);
+                                setShowEditBooking(true);
+                              }}
+                            >
+                              <Edit className="h-3 w-3 mr-1" />
+                              Edit
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="h-7 text-xs"
+                              onClick={async () => {
+                                if (confirm('Are you sure you want to cancel this booking?')) {
+                                  try {
+                                    await apiService.cancelBooking(actualBooking.id);
+                                    toast.success('Booking cancelled');
+                                    fetchBookings();
+                                    setSelectedDayBookings(null);
+                                  } catch (error: any) {
+                                    toast.error(error.message || 'Failed to cancel booking');
+                                  }
+                                }
+                              }}
+                            >
+                              <Trash2 className="h-3 w-3 mr-1" />
+                              Cancel
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
                   );
@@ -1186,6 +1257,385 @@ export function CalendarPage({ onNavigate }: CalendarPageProps) {
                 Close
               </Button>
             </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Add Booking Modal */}
+      {showAddBooking && (
+        <div 
+          className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+          onClick={() => setShowAddBooking(false)}
+        >
+          <Card 
+            className="w-full max-w-md max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Add New Booking</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">Create a new booking for a customer</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowAddBooking(false)}
+                  className="h-8 w-8 p-0"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>Customer Name *</Label>
+              <Input
+                value={newBooking.customer_name}
+                onChange={(e) => setNewBooking({ ...newBooking, customer_name: e.target.value })}
+                placeholder="John Doe"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Customer Phone *</Label>
+              <Input
+                value={newBooking.customer_phone}
+                onChange={(e) => setNewBooking({ ...newBooking, customer_phone: e.target.value })}
+                placeholder="+1234567890"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Customer Email</Label>
+              <Input
+                type="email"
+                value={newBooking.customer_email}
+                onChange={(e) => setNewBooking({ ...newBooking, customer_email: e.target.value })}
+                placeholder="john@example.com"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Date *</Label>
+                <Input
+                  type="date"
+                  value={newBooking.booking_date}
+                  onChange={(e) => setNewBooking({ ...newBooking, booking_date: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Time *</Label>
+                <Input
+                  type="time"
+                  value={newBooking.booking_time}
+                  onChange={(e) => setNewBooking({ ...newBooking, booking_time: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Service</Label>
+                <Select
+                  value={newBooking.service_id || undefined}
+                  onValueChange={(value) => setNewBooking({ ...newBooking, service_id: value || '' })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select service" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {services.map((service) => (
+                      <SelectItem key={service.id} value={service.id.toString()}>
+                        {service.name} {service.price ? `($${service.price})` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Staff</Label>
+                <Select
+                  value={newBooking.staff_id || undefined}
+                  onValueChange={(value) => setNewBooking({ ...newBooking, staff_id: value || '' })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select staff" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {staff.map((member) => (
+                      <SelectItem key={member.id} value={member.id.toString()}>
+                        {member.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Party Size</Label>
+              <Input
+                type="number"
+                min="1"
+                value={newBooking.party_size}
+                onChange={(e) => setNewBooking({ ...newBooking, party_size: parseInt(e.target.value) || 1 })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Total Price</Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={newBooking.total_price}
+                onChange={(e) => setNewBooking({ ...newBooking, total_price: e.target.value })}
+                placeholder="0.00"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Notes</Label>
+              <Textarea
+                value={newBooking.notes}
+                onChange={(e) => setNewBooking({ ...newBooking, notes: e.target.value })}
+                placeholder="Additional notes..."
+              />
+            </div>
+            <div className="flex gap-2 pt-4">
+              <Button
+                type="button"
+                className="flex-1"
+                onClick={async () => {
+                  if (!newBooking.customer_name || !newBooking.customer_phone || !newBooking.booking_date || !newBooking.booking_time) {
+                    toast.error('Please fill in all required fields');
+                    return;
+                  }
+                  const merchantId = user?.merchant_id || user?.id;
+                  if (!merchantId) {
+                    toast.error('Merchant ID not found');
+                    return;
+                  }
+                  try {
+                    await apiService.createBooking({
+                      merchant_id: merchantId,
+                      service_id: newBooking.service_id ? parseInt(newBooking.service_id) : undefined,
+                      staff_id: newBooking.staff_id ? parseInt(newBooking.staff_id) : undefined,
+                      customer_name: newBooking.customer_name,
+                      customer_phone: newBooking.customer_phone,
+                      customer_email: newBooking.customer_email || undefined,
+                      booking_date: newBooking.booking_date,
+                      booking_time: newBooking.booking_time,
+                      party_size: newBooking.party_size,
+                      total_price: newBooking.total_price ? parseFloat(newBooking.total_price) : undefined,
+                      notes: newBooking.notes || undefined
+                    });
+                    toast.success('Booking created successfully');
+                    setShowAddBooking(false);
+                    setNewBooking({
+                      customer_name: '',
+                      customer_phone: '',
+                      customer_email: '',
+                      booking_date: '',
+                      booking_time: '',
+                      service_id: '',
+                      staff_id: '',
+                      party_size: 1,
+                      total_price: '',
+                      notes: ''
+                    });
+                    fetchBookings();
+                  } catch (error: any) {
+                    toast.error(error.message || 'Failed to create booking');
+                  }
+                }}
+              >
+                Create Booking
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setShowAddBooking(false)}>
+                Cancel
+              </Button>
+            </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Edit Booking Modal */}
+      {showEditBooking && editingBooking && (
+        <div 
+          className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+          onClick={() => {
+            setShowEditBooking(false);
+            setEditingBooking(null);
+          }}
+        >
+          <Card 
+            className="w-full max-w-md max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Edit Booking</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">Update booking details</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setShowEditBooking(false);
+                    setEditingBooking(null);
+                  }}
+                  className="h-8 w-8 p-0"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Customer Name *</Label>
+                <Input
+                  value={editingBooking.customer_name}
+                  onChange={(e) => setEditingBooking({ ...editingBooking, customer_name: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Customer Phone *</Label>
+                <Input
+                  value={editingBooking.customer_phone}
+                  onChange={(e) => setEditingBooking({ ...editingBooking, customer_phone: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Customer Email</Label>
+                <Input
+                  type="email"
+                  value={editingBooking.customer_email || ''}
+                  onChange={(e) => setEditingBooking({ ...editingBooking, customer_email: e.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Date *</Label>
+                  <Input
+                    type="date"
+                    value={editingBooking.booking_date}
+                    onChange={(e) => setEditingBooking({ ...editingBooking, booking_date: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Time *</Label>
+                  <Input
+                    type="time"
+                    value={editingBooking.booking_time}
+                    onChange={(e) => setEditingBooking({ ...editingBooking, booking_time: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Service</Label>
+                  <Select
+                    value={editingBooking.service_id?.toString() || undefined}
+                    onValueChange={(value) => setEditingBooking({ ...editingBooking, service_id: value ? parseInt(value) : undefined })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select service" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {services.map((service) => (
+                        <SelectItem key={service.id} value={service.id.toString()}>
+                          {service.name} {service.price ? `($${service.price})` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Staff</Label>
+                  <Select
+                    value={editingBooking.staff_id?.toString() || undefined}
+                    onValueChange={(value) => setEditingBooking({ ...editingBooking, staff_id: value ? parseInt(value) : undefined })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select staff" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {staff.map((member) => (
+                        <SelectItem key={member.id} value={member.id.toString()}>
+                          {member.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Party Size</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={editingBooking.party_size}
+                  onChange={(e) => setEditingBooking({ ...editingBooking, party_size: parseInt(e.target.value) || 1 })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Total Price</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={editingBooking.total_price || ''}
+                  onChange={(e) => setEditingBooking({ ...editingBooking, total_price: e.target.value ? parseFloat(e.target.value) : undefined })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Notes</Label>
+                <Textarea
+                  value={editingBooking.notes || ''}
+                  onChange={(e) => setEditingBooking({ ...editingBooking, notes: e.target.value })}
+                />
+              </div>
+              <div className="flex gap-2 pt-4">
+                <Button
+                  type="button"
+                  className="flex-1"
+                  onClick={async () => {
+                    if (!editingBooking.customer_name || !editingBooking.customer_phone || !editingBooking.booking_date || !editingBooking.booking_time) {
+                      toast.error('Please fill in all required fields');
+                      return;
+                    }
+                    try {
+                      await apiService.updateBooking(editingBooking.id, {
+                        customer_name: editingBooking.customer_name,
+                        customer_phone: editingBooking.customer_phone,
+                        customer_email: editingBooking.customer_email,
+                        booking_date: editingBooking.booking_date,
+                        booking_time: editingBooking.booking_time,
+                        service_id: editingBooking.service_id,
+                        staff_id: editingBooking.staff_id,
+                        party_size: editingBooking.party_size,
+                        total_price: editingBooking.total_price,
+                        notes: editingBooking.notes
+                      });
+                      toast.success('Booking updated successfully');
+                      setShowEditBooking(false);
+                      setEditingBooking(null);
+                      fetchBookings();
+                    } catch (error: any) {
+                      toast.error(error.message || 'Failed to update booking');
+                    }
+                  }}
+                >
+                  Update Booking
+                </Button>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => {
+                    setShowEditBooking(false);
+                    setEditingBooking(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </CardContent>
           </Card>
         </div>
       )}

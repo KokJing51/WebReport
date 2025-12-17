@@ -85,6 +85,9 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
       if (coverFile) formData.append('cover_photo', coverFile);
 
       // 2. Prepare text data
+      const user = localStorage.getItem('user');
+      const userData = user ? JSON.parse(user) : null;
+      
       const allData = {
         name: businessData.name,
         industry: businessData.industry,
@@ -99,7 +102,8 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
         // Ensure these get sent
         breakTime: businessData.breakTime,
         bookAhead: businessData.bookAhead,
-        workingHours: businessData.workingHours
+        workingHours: businessData.workingHours,
+        user_id: userData?.id || userData?.merchant_id // Send user ID to link merchant
       };
 
       formData.append('data', JSON.stringify(allData));
@@ -114,7 +118,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
 
       if (result.success) {
         console.log("✅ Merchant Created! ID:", result.merchantId);
-        alert("Setup Complete! Your business has been created.");
+        alert("Setup Complete! Your business has been created. Please log in to access your dashboard.");
         onComplete(); 
       } else {
         alert("Error saving data: " + (result.error || "Unknown error"));

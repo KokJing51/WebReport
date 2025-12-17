@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -30,28 +30,31 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { cn } from '../ui/utils';
+import { apiService } from '../../services/api';
+import { toast } from 'sonner';
 
 interface BookingsPageProps {
   onNavigate: (page: string) => void;
+  user?: any;
 }
 
 interface Booking {
-  id: string;
-  customer: {
-    name: string;
-    phone: string;
-    email: string;
-  };
-  service: string;
-  staff: string;
-  date: string;
-  time: string;
-  duration: number;
-  price: number;
-  status: 'confirmed' | 'pending' | 'cancelled' | 'completed' | 'no-show';
-  channel: 'whatsapp' | 'web';
+  id: number;
+  merchant_id: number;
+  service_id?: number;
+  staff_id?: number;
+  customer_name: string;
+  customer_phone: string;
+  customer_email?: string;
+  booking_date: string;
+  booking_time: string;
+  party_size: number;
+  total_price?: number;
   notes?: string;
-  createdAt: string;
+  status: string;
+  service_name?: string;
+  staff_name?: string;
+  created_at: string;
 }
 
 const mockBookings: Booking[] = [
@@ -169,7 +172,7 @@ const getChannelIcon = (channel: string) => {
   );
 };
 
-export function BookingsPage({ onNavigate }: BookingsPageProps) {
+export function BookingsPage({ onNavigate, user }: BookingsPageProps) {
   const [selectedBookings, setSelectedBookings] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -177,6 +180,70 @@ export function BookingsPage({ onNavigate }: BookingsPageProps) {
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Fetch bookings
+  useEffect(() => {
+    if (user) {
+      fetchBookings();
+    }
+  }, [user]);
+
+  const fetchBookings = async () => {
+    if (!user) return;
+    
+    const merchantId = user.merchant_id || user.id;
+    if (!merchantId) {
+      console.warn('No merchant_id or user id found');
+      return;
+    }
+    
+    setIsLoading(true);
+    try {
+      const data = await apiService.getBookings({
+        merchant_id: merchantId
+      });
+      setBookings(data || []);
+    } catch (error: any) {
+      toast.error('Failed to fetch bookings');
+      console.error(error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleExportCSV = async () => {
+    if (!user) {
+      toast.error('User not found');
+      return;
+    }
+
+    const merchantId = user.merchant_id || user.id;
+    if (!merchantId) {
+      toast.error('Merchant ID not found');
+      return;
+    }
+
+    try {
+      const blob = await apiService.exportBookingsToCSV({
+        merchant_id: merchantId
+      });
+      
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `bookings-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      toast.success('Bookings exported successfully');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to export bookings');
+    }
+  };
 
   const fadeInUp = {
     hidden: { opacity: 0, y: 30 },
@@ -197,14 +264,13 @@ export function BookingsPage({ onNavigate }: BookingsPageProps) {
     }
   };
 
-  const filteredBookings = mockBookings.filter(booking => {
-    const matchesSearch = booking.customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         booking.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         booking.service.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredBookings = bookings.filter(booking => {
+    const matchesSearch = booking.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         booking.id.toString().includes(searchTerm.toLowerCase()) ||
+                         (booking.service_name || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || booking.status === statusFilter;
-    const matchesChannel = channelFilter === 'all' || booking.channel === channelFilter;
-    
-    return matchesSearch && matchesStatus && matchesChannel;
+    // Note: channel filter removed as it's not in the database schema
+    return matchesSearch && matchesStatus;
   });
 
   // Pagination calculations
@@ -307,9 +373,9 @@ export function BookingsPage({ onNavigate }: BookingsPageProps) {
               </SelectContent>
             </Select>
 
-            <Button variant="outline">
+            <Button variant="outline" onClick={handleExportCSV} disabled={isLoading}>
               <Download className="h-4 w-4 mr-2" />
-              Export
+              Export CSV
             </Button>
           </div>
         </CardContent>
@@ -391,26 +457,28 @@ export function BookingsPage({ onNavigate }: BookingsPageProps) {
                       onCheckedChange={(checked) => handleSelectBooking(booking.id, checked as boolean)}
                     />
                   </TableCell>
-                  <TableCell className="font-mono text-sm">{booking.id}</TableCell>
+                  <TableCell className="font-mono text-sm">#{booking.id}</TableCell>
                   <TableCell>
                     <div>
-                      <p className="font-medium">{booking.customer.name}</p>
-                      <p className="text-sm text-muted-foreground">{booking.customer.phone}</p>
+                      <p className="font-medium">{booking.customer_name}</p>
+                      <p className="text-sm text-muted-foreground">{booking.customer_phone}</p>
                     </div>
                   </TableCell>
                   <TableCell>
                     <div>
-                      <p className="font-medium">{booking.service}</p>
-                      <p className="text-sm text-muted-foreground">{booking.duration} min</p>
+                      <p className="font-medium">{booking.service_name || 'N/A'}</p>
+                      <p className="text-sm text-muted-foreground">Party: {booking.party_size}</p>
                     </div>
                   </TableCell>
                   <TableCell>
                     <div>
-                      <p className="font-medium">{new Date(booking.date).toLocaleDateString()}</p>
-                      <p className="text-sm text-muted-foreground">{booking.time}</p>
+                      <p className="font-medium">{new Date(booking.booking_date).toLocaleDateString()}</p>
+                      <p className="text-sm text-muted-foreground">{booking.booking_time}</p>
                     </div>
                   </TableCell>
-                  <TableCell>{booking.staff}</TableCell>
+                  <TableCell>
+                    <p className="font-medium">{booking.staff_name || 'N/A'}</p>
+                  </TableCell>
                   <TableCell>
                     <Badge className={cn("capitalize", getStatusColor(booking.status))}>
                       {booking.status}
@@ -418,11 +486,11 @@ export function BookingsPage({ onNavigate }: BookingsPageProps) {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      {getChannelIcon(booking.channel)}
-                      <span className="capitalize text-sm">{booking.channel}</span>
+                      <Calendar className="h-4 w-4 text-blue-600" />
+                      <span className="capitalize text-sm">web</span>
                     </div>
                   </TableCell>
-                  <TableCell className="font-medium">${booking.price}</TableCell>
+                  <TableCell className="font-medium">RM {booking.total_price || '0.00'}</TableCell>
                   <TableCell>
                     <Button
                       variant="ghost"
@@ -542,7 +610,7 @@ export function BookingsPage({ onNavigate }: BookingsPageProps) {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="font-medium">Booking ID</span>
-                  <span className="font-mono text-sm">{selectedBooking.id}</span>
+                  <span className="font-mono text-sm">#{selectedBooking.id}</span>
                 </div>
                 
                 <div className="flex items-center justify-between">
@@ -550,14 +618,6 @@ export function BookingsPage({ onNavigate }: BookingsPageProps) {
                   <Badge className={cn("capitalize", getStatusColor(selectedBooking.status))}>
                     {selectedBooking.status}
                   </Badge>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">Channel</span>
-                  <div className="flex items-center gap-2">
-                    {getChannelIcon(selectedBooking.channel)}
-                    <span className="capitalize">{selectedBooking.channel}</span>
-                  </div>
                 </div>
               </div>
 
@@ -569,16 +629,18 @@ export function BookingsPage({ onNavigate }: BookingsPageProps) {
                 <div className="space-y-3">
                   <div className="flex items-center gap-3">
                     <User className="h-4 w-4 text-muted-foreground" />
-                    <span>{selectedBooking.customer.name}</span>
+                    <span>{selectedBooking.customer_name}</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <Phone className="h-4 w-4 text-muted-foreground" />
-                    <span>{selectedBooking.customer.phone}</span>
+                    <span>{selectedBooking.customer_phone}</span>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <Mail className="h-4 w-4 text-muted-foreground" />
-                    <span>{selectedBooking.customer.email}</span>
-                  </div>
+                  {selectedBooking.customer_email && (
+                    <div className="flex items-center gap-3">
+                      <Mail className="h-4 w-4 text-muted-foreground" />
+                      <span>{selectedBooking.customer_email}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -590,27 +652,23 @@ export function BookingsPage({ onNavigate }: BookingsPageProps) {
                 <div className="space-y-3">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Service</span>
-                    <span className="font-medium">{selectedBooking.service}</span>
+                    <span className="font-medium">{selectedBooking.service_name || 'N/A'}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Staff</span>
-                    <span>{selectedBooking.staff}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Duration</span>
-                    <span>{selectedBooking.duration} minutes</span>
+                    <span className="text-muted-foreground">Party Size</span>
+                    <span>{selectedBooking.party_size}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Date</span>
-                    <span>{new Date(selectedBooking.date).toLocaleDateString()}</span>
+                    <span>{new Date(selectedBooking.booking_date).toLocaleDateString()}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Time</span>
-                    <span>{selectedBooking.time}</span>
+                    <span>{selectedBooking.booking_time}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Price</span>
-                    <span className="font-medium">${selectedBooking.price}</span>
+                    <span className="font-medium">RM {selectedBooking.total_price || '0.00'}</span>
                   </div>
                 </div>
               </div>
@@ -633,7 +691,20 @@ export function BookingsPage({ onNavigate }: BookingsPageProps) {
                 <h3 className="font-medium">Actions</h3>
                 <div className="grid grid-cols-2 gap-2">
                   {selectedBooking.status === 'pending' && (
-                    <Button size="sm" className="w-full">
+                    <Button 
+                      size="sm" 
+                      className="w-full"
+                      onClick={async () => {
+                        try {
+                          await apiService.updateBooking(selectedBooking.id, { status: 'confirmed' });
+                          toast.success('Booking confirmed');
+                          fetchBookings();
+                          setSelectedBooking(null);
+                        } catch (error: any) {
+                          toast.error(error.message || 'Failed to confirm booking');
+                        }
+                      }}
+                    >
                       <CheckCircle className="h-4 w-4 mr-2" />
                       Confirm
                     </Button>
@@ -641,26 +712,28 @@ export function BookingsPage({ onNavigate }: BookingsPageProps) {
                   
                   {['confirmed', 'pending'].includes(selectedBooking.status) && (
                     <>
-                      <Button size="sm" variant="outline" className="w-full">
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        className="w-full"
+                        onClick={async () => {
+                          if (confirm('Are you sure you want to cancel this booking?')) {
+                            try {
+                              await apiService.cancelBooking(selectedBooking.id);
+                              toast.success('Booking cancelled');
+                              fetchBookings();
+                              setSelectedBooking(null);
+                            } catch (error: any) {
+                              toast.error(error.message || 'Failed to cancel booking');
+                            }
+                          }
+                        }}
+                      >
                         <XCircle className="h-4 w-4 mr-2" />
                         Cancel
                       </Button>
-                      <Button size="sm" variant="outline" className="w-full">
-                        <RotateCcw className="h-4 w-4 mr-2" />
-                        Reschedule
-                      </Button>
                     </>
                   )}
-                  
-                  <Button size="sm" variant="outline" className="w-full">
-                    <MessageSquare className="h-4 w-4 mr-2" />
-                    Message
-                  </Button>
-                  
-                  <Button size="sm" variant="outline" className="w-full">
-                    <DollarSign className="h-4 w-4 mr-2" />
-                    Refund
-                  </Button>
                 </div>
               </div>
 
@@ -671,11 +744,7 @@ export function BookingsPage({ onNavigate }: BookingsPageProps) {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Created</span>
-                    <span>{new Date(selectedBooking.createdAt).toLocaleDateString()}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Last Updated</span>
-                    <span>{new Date(selectedBooking.createdAt).toLocaleDateString()}</span>
+                    <span>{new Date(selectedBooking.created_at).toLocaleDateString()}</span>
                   </div>
                 </div>
               </div>
