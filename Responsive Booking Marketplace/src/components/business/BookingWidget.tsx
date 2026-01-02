@@ -41,7 +41,20 @@ export function BookingWidget({ services, business, onContinue, isSticky = false
       fetch(`http://localhost:5000/api/bookings?merchant_id=${business.id}&date=${dateStr}`)
         .then(res => res.json())
         .then(data => {
-            setBookedSlots(data || []);
+            // Extract and convert booking times to display format (e.g., "2:00 PM")
+            const bookedTimes = (data || []).map((booking: any) => {
+              if (!booking.booking_time) return null;
+              
+              // Convert 24-hour format (e.g., "14:00") to 12-hour format (e.g., "2:00 PM")
+              const [hours, minutes] = booking.booking_time.split(':').map(Number);
+              const ampm = hours >= 12 ? 'PM' : 'AM';
+              const displayHours = hours % 12 || 12;
+              const displayMinutes = minutes < 10 ? `0${minutes}` : minutes;
+              return `${displayHours}:${displayMinutes} ${ampm}`;
+            }).filter(Boolean);
+            
+            console.log('Booked slots for', dateStr, ':', bookedTimes);
+            setBookedSlots(bookedTimes);
         })
         .catch(err => console.error("Failed to fetch slots", err));
     } else {

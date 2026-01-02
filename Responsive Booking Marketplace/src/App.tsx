@@ -310,7 +310,10 @@ image: getImageUrl(b.logo_path) || getImageUrl(b.cover_photo_path),
         <>
           <SearchResults
             businesses={filteredBusinesses} 
-            onBusinessClick={(id) => handleBusinessClick(id)}
+            onBusinessClick={(id) => {
+  const business = businesses.find(b => b.id === id);
+  if (business) handleBusinessClick(business);
+}}
             categories={categories}
             onFilterChange={handleSearch}
           />

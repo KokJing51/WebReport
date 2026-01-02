@@ -47,7 +47,7 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Welcome to Fein Booking</DialogTitle>
+          <DialogTitle>Welcome to Booklyn Booking</DialogTitle>
           <DialogDescription>
             Sign in to manage your bookings and preferences
           </DialogDescription>

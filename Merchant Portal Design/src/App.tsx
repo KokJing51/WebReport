@@ -8,11 +8,12 @@ import { BookingsPage } from './components/bookings/BookingsPage';
 import ReviewsPage from './components/reviews/ReviewsPage';
 import { ContentManager } from './components/content/ContentManager';
 import { AutomationsPage } from './components/automations/AutomationsPage';
+import { ShowcasePage } from './components/showcase/ShowcasePage';
 import { SettingsPage } from './components/settings/SettingsPage';
 import { Toaster } from './components/ui/sonner';
 
 type AppState = 'auth' | 'onboarding' | 'app';
-type AppPage = 'dashboard' | 'calendar' | 'bookings' | 'reviews' | 'content' | 'automations' | 'settings';
+type AppPage = 'dashboard' | 'calendar' | 'bookings' | 'reviews' | 'content' | 'automations' | 'showcase' | 'settings';
 
 export default function App() {
   const [appState, setAppState] = useState<AppState>(() => {
@@ -60,7 +61,7 @@ export default function App() {
   const renderCurrentPage = () => {
     switch (currentPage) {
       case 'dashboard':
-        return <Dashboard onNavigate={handleNavigate} />;
+        return <Dashboard onNavigate={handleNavigate} user={currentUser} />;
       case 'calendar':
         return <CalendarPage onNavigate={handleNavigate} user={currentUser} />;
       case 'bookings':
@@ -71,10 +72,12 @@ export default function App() {
         return <ContentManager onNavigate={handleNavigate} />;
       case 'automations':
         return <AutomationsPage onNavigate={handleNavigate} />;
+      case 'showcase':
+        return <ShowcasePage />;
       case 'settings':
         return <SettingsPage onNavigate={handleNavigate} />;
       default:
-        return <Dashboard onNavigate={handleNavigate} />;
+        return <Dashboard onNavigate={handleNavigate} user={currentUser} />;
     }
   };
 

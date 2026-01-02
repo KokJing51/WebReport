@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -39,6 +39,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 
 interface DashboardProps {
   onNavigate: (page: string) => void;
+  user?: any;
 }
 
 interface YearData {
@@ -114,7 +115,7 @@ const channelData = [
   { name: 'Web Portal', value: 32, color: '#3B82F6' }
 ];
 
-const topServices = [
+const defaultTopServices = [
   { name: 'Haircut & Style', bookings: 45, revenue: 2250 },
   { name: 'Hair Coloring', bookings: 28, revenue: 2240 },
   { name: 'Beard Trim', bookings: 32, revenue: 960 },
@@ -139,9 +140,43 @@ const completionRateData = [
   { day: 'Sun', rate: 93 }
 ];
 
-export function Dashboard({ onNavigate }: DashboardProps) {
+export function Dashboard({ onNavigate, user }: DashboardProps) {
   const [selectedYear, setSelectedYear] = useState('2025');
   const currentData = yearlyData[selectedYear];
+  
+  // Real data state
+  const [realStats, setRealStats] = useState<any>(null);
+  const [topServices, setTopServices] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  // Fetch real data from API
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      if (!user?.merchant_id) {
+        setLoading(false);
+        return;
+      }
+      
+      try {
+        // Fetch main stats
+        const statsRes = await fetch(`http://localhost:5000/api/dashboard/stats/${user.merchant_id}`);
+        const stats = await statsRes.json();
+        setRealStats(stats);
+        
+        // Fetch top services
+        const servicesRes = await fetch(`http://localhost:5000/api/dashboard/top-services/${user.merchant_id}`);
+        const services = await servicesRes.json();
+        setTopServices(services);
+        
+        setLoading(false);
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+        setLoading(false);
+      }
+    };
+    
+    fetchDashboardData();
+  }, [user]);
 
   // Animation variants for scroll-triggered animations
   const fadeInUp = {
@@ -283,9 +318,11 @@ export function Dashboard({ onNavigate }: DashboardProps) {
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{currentData.todaysBookings}</div>
+            <div className="text-2xl font-bold">
+              {loading ? '...' : (realStats?.todaysBookings ?? currentData.todaysBookings)}
+            </div>
             <p className="text-xs text-muted-foreground">
-              <span className="text-green-600">+12%</span> from yesterday
+              {realStats ? 'Real-time data' : <span className="text-green-600">+12% from yesterday</span>}
             </p>
           </CardContent>
         </Card>
@@ -294,13 +331,15 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         <motion.div variants={fadeInUp}>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Week Occupancy</CardTitle>
+            <CardTitle className="text-sm font-medium">Monthly Bookings</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{currentData.weekOccupancy}%</div>
+            <div className="text-2xl font-bold">
+              {loading ? '...' : (realStats?.monthlyBookings ?? currentData.totalBookings)}
+            </div>
             <p className="text-xs text-muted-foreground">
-              <span className="text-green-600">+5%</span> from last week
+              {realStats ? 'This month' : <span className="text-green-600">+5% from last week</span>}
             </p>
           </CardContent>
         </Card>
@@ -313,9 +352,11 @@ export function Dashboard({ onNavigate }: DashboardProps) {
             <AlertCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{currentData.noShowRate}%</div>
+            <div className="text-2xl font-bold">
+              {loading ? '...' : (realStats?.noShowRate ?? currentData.noShowRate)}%
+            </div>
             <p className="text-xs text-muted-foreground">
-              <span className="text-red-600">+0.5%</span> from last week
+              {realStats ? 'Cancelled bookings' : <span className="text-red-600">+0.5% from last week</span>}
             </p>
           </CardContent>
         </Card>
@@ -328,9 +369,11 @@ export function Dashboard({ onNavigate }: DashboardProps) {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${currentData.weeklyRevenue.toLocaleString()}</div>
+            <div className="text-2xl font-bold">
+              ${loading ? '...' : (realStats?.weeklyRevenue ?? currentData.weeklyRevenue).toLocaleString()}
+            </div>
             <p className="text-xs text-muted-foreground">
-              <span className="text-green-600">+18%</span> from last week
+              {realStats ? 'This week' : <span className="text-green-600">+18% from last week</span>}
             </p>
           </CardContent>
         </Card>
@@ -678,7 +721,9 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {topServices.map((service, index) => (
+              {loading ? (
+                <p className="text-center text-muted-foreground">Loading...</p>
+              ) : (topServices.length > 0 ? topServices : defaultTopServices).map((service, index) => (
                 <div key={service.name} className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
@@ -690,7 +735,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="font-medium">${service.revenue}</p>
+                    <p className="font-medium">${Math.round(service.revenue)}</p>
                     <p className="text-sm text-muted-foreground">revenue</p>
                   </div>
                 </div>

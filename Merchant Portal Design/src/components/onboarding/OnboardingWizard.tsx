@@ -27,11 +27,12 @@ interface BusinessData {
   name: string;
   industry: string;
   address: string;
-  timezone: string;
+  phone: string;
   about: string;
   policies: string;
   cancellationPolicy: string;
   depositRequired: boolean;
+  bookingFeeAmount: number;
   services: any[];
   staff: any[];
   // New fields for Step 5
@@ -52,11 +53,12 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
     name: '',
     industry: '',
     address: '',
-    timezone: '',
+    phone: '',
     about: '',
     policies: '',
     cancellationPolicy: '',
     depositRequired: false,
+    bookingFeeAmount: 0,
     services: [],
     staff: [],
     // Default values for Step 5
@@ -84,27 +86,39 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
       if (logoFile) formData.append('logo', logoFile);
       if (coverFile) formData.append('cover_photo', coverFile);
 
-      // 2. Prepare text data
-      const user = localStorage.getItem('user');
-      const userData = user ? JSON.parse(user) : null;
-      
-      const allData = {
-        name: businessData.name,
-        industry: businessData.industry,
-        address: businessData.address,
-        timezone: businessData.timezone,
-        about: businessData.about,
-        policies: businessData.policies,
-        cancellationPolicy: businessData.cancellationPolicy,
-        depositRequired: businessData.depositRequired,
-        services: businessData.services,
-        staff: businessData.staff,
-        // Ensure these get sent
-        breakTime: businessData.breakTime,
-        bookAhead: businessData.bookAhead,
-        workingHours: businessData.workingHours,
-        user_id: userData?.id || userData?.merchant_id // Send user ID to link merchant
-      };
+      // Handle Staff Photos
+  // We need to tell the backend which file belongs to which staff member.
+  // We will add a 'photoIndex' to the staff data that points to the file in the upload array.
+  let photoCounter = 0;
+  const staffWithPhotoIndices = businessData.staff.map(member => {
+    if (member.photoFile) {
+      formData.append('staff_photos', member.photoFile);
+      return { ...member, photoIndex: photoCounter++ };
+    }
+    return { ...member, photoIndex: -1 };
+  });
+
+  // 2. Prepare text data
+  const user = localStorage.getItem('user');
+  const userData = user ? JSON.parse(user) : null;
+
+  const allData = {
+    name: businessData.name,
+    industry: businessData.industry,
+    address: businessData.address,
+    phone: businessData.phone,
+    about: businessData.about,
+    policies: businessData.policies,
+    cancellationPolicy: businessData.cancellationPolicy,
+    depositRequired: businessData.depositRequired,
+    bookingFeeAmount: businessData.bookingFeeAmount, // From Step 2
+    services: businessData.services,
+    staff: staffWithPhotoIndices, // Use the updated staff list
+    breakTime: businessData.breakTime,
+    bookAhead: businessData.bookAhead,
+    workingHours: businessData.workingHours,
+    user_id: userData?.id || userData?.merchant_id 
+  };
 
       formData.append('data', JSON.stringify(allData));
 
@@ -145,12 +159,12 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
 
   const addService = () => {
     const newService = {
-      id: Date.now(),
-      name: '',
-      duration: 30,
-      price: 0,
-      description: ''
-    };
+  id: Date.now(),
+  name: '',
+  duration: '', // Empty string allows placeholder to show
+  price: '',    // Empty string allows placeholder to show
+  description: ''
+};
     setBusinessData(prev => ({
       ...prev,
       services: [...prev.services, newService]
@@ -159,11 +173,13 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
 
   const addStaff = () => {
     const newStaff = {
-      id: Date.now(),
-      name: '',
-      bio: '',
-      services: []
-    };
+  id: Date.now(),
+  name: '',
+  bio: '',
+  services: [],
+  photoFile: null as File | null, // Store the file
+  photoPreview: '' // Store the preview URL
+};
     setBusinessData(prev => ({
       ...prev,
       staff: [...prev.staff, newStaff]
@@ -279,19 +295,14 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="timezone">Timezone</Label>
-                  <Select value={businessData.timezone} onValueChange={(value) => setBusinessData(prev => ({ ...prev, timezone: value }))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select timezone" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="EST">Eastern Time (EST)</SelectItem>
-                      <SelectItem value="CST">Central Time (CST)</SelectItem>
-                      <SelectItem value="MST">Mountain Time (MST)</SelectItem>
-                      <SelectItem value="PST">Pacific Time (PST)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+  <Label htmlFor="phone">Phone Number</Label>
+  <Input 
+    id="phone" 
+    value={businessData.phone}
+    onChange={(e) => setBusinessData(prev => ({ ...prev, phone: e.target.value }))}
+    placeholder="+1 (555) 000-0000" 
+  />
+</div>
               </div>
             </div>
           </div>
@@ -340,18 +351,33 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                     />
                   </div>
 
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label>Require Deposit</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Require customers to pay a deposit when booking
-                      </p>
-                    </div>
-                    <Switch 
-                      checked={businessData.depositRequired}
-                      onCheckedChange={(checked) => setBusinessData(prev => ({ ...prev, depositRequired: checked }))}
-                    />
-                  </div>
+                  <div className="space-y-4">
+  <div className="flex items-center justify-between">
+    <div className="space-y-0.5">
+      <Label>Require Booking Fee</Label>
+      <p className="text-sm text-muted-foreground">
+        Require customers to pay a fee when booking
+      </p>
+    </div>
+    <Switch 
+      checked={businessData.depositRequired}
+      onCheckedChange={(checked) => setBusinessData(prev => ({ ...prev, depositRequired: checked }))}
+    />
+  </div>
+
+  {businessData.depositRequired && (
+    <div className="flex items-center gap-4 animate-in fade-in slide-in-from-top-2">
+      <Label className="whitespace-nowrap">Fee Amount ($)</Label>
+      <Input 
+        type="number"
+        className="max-w-[150px]"
+        placeholder="0.00"
+        value={businessData.bookingFeeAmount}
+        onChange={(e) => setBusinessData(prev => ({ ...prev, bookingFeeAmount: parseFloat(e.target.value) || 0 }))}
+      />
+    </div>
+  )}
+</div>
                 </div>
               </div>
             </div>
@@ -391,28 +417,30 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                         <div className="space-y-2">
                           <Label>Duration (minutes)</Label>
                           <Input 
-                              type="number" 
-                              value={service.duration}
-                              onChange={(e) => {
-                                  const newServices = [...businessData.services];
-                                  newServices[index].duration = parseInt(e.target.value) || 0;
-                                  setBusinessData(prev => ({ ...prev, services: newServices }));
-                              }}
-                              placeholder="60" 
-                          />
+    type="number" 
+    value={service.duration}
+    onChange={(e) => {
+        const newServices = [...businessData.services];
+        // Allow empty string or parse to integer
+        newServices[index].duration = e.target.value === '' ? '' : parseInt(e.target.value);
+        setBusinessData(prev => ({ ...prev, services: newServices }));
+    }}
+    placeholder="0" 
+/>
                         </div>
                         <div className="space-y-2">
                           <Label>Price</Label>
                           <Input 
-                              type="number" 
-                              value={service.price}
-                              onChange={(e) => {
-                                  const newServices = [...businessData.services];
-                                  newServices[index].price = parseInt(e.target.value) || 0;
-                                  setBusinessData(prev => ({ ...prev, services: newServices }));
-                              }}
-                              placeholder="50" 
-                          />
+    type="number" 
+    value={service.price}
+    onChange={(e) => {
+        const newServices = [...businessData.services];
+        // Allow empty string or parse to float (for cents)
+        newServices[index].price = e.target.value === '' ? '' : parseFloat(e.target.value);
+        setBusinessData(prev => ({ ...prev, services: newServices }));
+    }}
+    placeholder="0" 
+/>
                         </div>
                         <div className="flex items-end">
                           <Button 
@@ -458,16 +486,51 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                 {businessData.staff.map((member, index) => (
                   <Card key={member.id}>
                     <CardContent className="p-4">
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-4">
-                          <Avatar className="h-16 w-16">
-                            <AvatarFallback>
-                              <Camera className="h-6 w-6" />
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1 space-y-2">
+                      <div className="flex items-start gap-4">
+                        {/* 1. Compact Photo Upload Section */}
+                        <div className="flex-shrink-0">
+                          <label className="cursor-pointer block group relative">
+                            {/* Force hide the native input using style display:none */}
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              style={{ display: 'none' }}
+                              onChange={(e) => {
+                                if (e.target.files && e.target.files[0]) {
+                                  const file = e.target.files[0];
+                                  const newStaff = [...businessData.staff];
+                                  newStaff[index].photoFile = file;
+                                  newStaff[index].photoPreview = URL.createObjectURL(file);
+                                  setBusinessData(prev => ({ ...prev, staff: newStaff }));
+                                }
+                              }}
+                            />
+                            
+                            {/* Visual Circle Trigger */}
+                            <div className="h-16 w-16 rounded-full bg-muted border-2 border-dashed border-muted-foreground/25 hover:border-primary flex flex-col items-center justify-center overflow-hidden transition-colors">
+                              {member.photoPreview ? (
+                                <img src={member.photoPreview} alt={member.name} className="h-full w-full object-cover" />
+                              ) : (
+                                <>
+                                  <Camera className="h-5 w-5 text-muted-foreground mb-1" />
+                                  <span className="text-[10px] text-muted-foreground leading-none">Upload</span>
+                                </>
+                              )}
+                            </div>
+                            
+                            {/* Plus icon overlay on hover */}
+                            <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                               <Plus className="h-6 w-6 text-white" />
+                            </div>
+                          </label>
+                        </div>
+
+                        {/* 2. Text Inputs - Extended to the left with flex-1 */}
+                        <div className="flex-1 space-y-3">
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Name</Label>
                             <Input 
-                                placeholder="Staff member name" 
+                                placeholder="e.g. Sarah Jones" 
                                 value={member.name}
                                 onChange={(e) => {
                                     const newStaff = [...businessData.staff];
@@ -475,9 +538,12 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                                     setBusinessData(prev => ({ ...prev, staff: newStaff }));
                                 }}
                             />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Role / Bio</Label>
                             <Textarea 
-                                placeholder="Brief bio..." 
-                                className="min-h-[60px]" 
+                                placeholder="e.g. Senior Stylist, specializes in color..." 
+                                className="min-h-[60px] resize-none" 
                                 value={member.bio}
                                 onChange={(e) => {
                                     const newStaff = [...businessData.staff];
@@ -486,17 +552,20 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                                 }}
                             />
                           </div>
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => {
-                                const newStaff = businessData.staff.filter((_, i) => i !== index);
-                                setBusinessData(prev => ({ ...prev, staff: newStaff }));
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
                         </div>
+
+                        {/* 3. Delete Button */}
+                        <Button 
+                          variant="ghost" 
+                          size="icon"
+                          className="text-muted-foreground hover:text-destructive mt-6"
+                          onClick={() => {
+                              const newStaff = businessData.staff.filter((_, i) => i !== index);
+                              setBusinessData(prev => ({ ...prev, staff: newStaff }));
+                          }}
+                        >
+                          <Trash2 className="h-5 w-5" />
+                        </Button>
                       </div>
                     </CardContent>
                   </Card>
@@ -518,82 +587,103 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
             <div>
               <h3 className="text-lg font-semibold mb-4">Schedule & Availability</h3>
               
-              <div className="space-y-6">
+              {/* CHANGE HERE: 'items-center' puts the right box in the middle vertically */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+                
+                {/* Left Column: Working Hours */}
                 <div className="space-y-4">
                   <h4 className="font-medium">Working Hours</h4>
-                  {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day) => (
-                    <div key={day} className="flex items-center gap-4">
-                      <div className="w-20">
-                        <Label>{day}</Label>
+                  <div className="space-y-3">
+                    {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day) => (
+                      <div key={day} className="flex items-center gap-3 text-sm">
+                        <div className="w-20 font-medium">
+                          <Label className="cursor-pointer">{day}</Label>
+                        </div>
+                        <Switch 
+                          checked={businessData.workingHours[day]?.open}
+                          onCheckedChange={(checked) => {
+                            setBusinessData(prev => ({
+                              ...prev,
+                              workingHours: {
+                                ...prev.workingHours,
+                                [day]: { ...prev.workingHours[day], open: checked }
+                              }
+                            }));
+                          }}
+                        />
+                        <div className="flex items-center gap-2">
+                          <Input 
+                            value={businessData.workingHours[day]?.start}
+                            onChange={(e) => {
+                              setBusinessData(prev => ({
+                                ...prev,
+                                workingHours: {
+                                  ...prev.workingHours,
+                                  [day]: { ...prev.workingHours[day], start: e.target.value }
+                                }
+                              }));
+                            }}
+                            className="h-8 w-24 px-2" 
+                            disabled={!businessData.workingHours[day]?.open}
+                          />
+                          <span className="text-muted-foreground text-xs">to</span>
+                          <Input 
+                            value={businessData.workingHours[day]?.end}
+                             onChange={(e) => {
+                              setBusinessData(prev => ({
+                                ...prev,
+                                workingHours: {
+                                  ...prev.workingHours,
+                                  [day]: { ...prev.workingHours[day], end: e.target.value }
+                                }
+                              }));
+                            }}
+                            className="h-8 w-24 px-2"
+                            disabled={!businessData.workingHours[day]?.open}
+                          />
+                        </div>
                       </div>
-                      <Switch 
-                        checked={businessData.workingHours[day]?.open}
-                        onCheckedChange={(checked) => {
-                          setBusinessData(prev => ({
-                            ...prev,
-                            workingHours: {
-                              ...prev.workingHours,
-                              [day]: { ...prev.workingHours[day], open: checked }
-                            }
-                          }));
-                        }}
-                      />
-                      <Input 
-                        value={businessData.workingHours[day]?.start}
-                        onChange={(e) => {
-                          setBusinessData(prev => ({
-                            ...prev,
-                            workingHours: {
-                              ...prev.workingHours,
-                              [day]: { ...prev.workingHours[day], start: e.target.value }
-                            }
-                          }));
-                        }}
-                        className="w-24" 
-                        disabled={!businessData.workingHours[day]?.open}
-                      />
-                      <span>to</span>
-                      <Input 
-                        value={businessData.workingHours[day]?.end}
-                         onChange={(e) => {
-                          setBusinessData(prev => ({
-                            ...prev,
-                            workingHours: {
-                              ...prev.workingHours,
-                              [day]: { ...prev.workingHours[day], end: e.target.value }
-                            }
-                          }));
-                        }}
-                        className="w-24"
-                        disabled={!businessData.workingHours[day]?.open}
-                      />
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
 
-                <Separator />
-
-                <div className="grid grid-cols-2 gap-6">
+                {/* Right Column: Booking Settings */}
+                <div className="space-y-6 bg-muted/30 p-6 rounded-lg border border-border">
+                  <h4 className="font-medium flex items-center gap-2">
+                     Booking Settings
+                  </h4>
+                  
                   <div className="space-y-4">
-                    <h4 className="font-medium">Booking Settings</h4>
                     <div className="space-y-2">
                       <Label>Break between bookings (minutes)</Label>
                       <Input 
                         type="number" 
                         value={businessData.breakTime}
                         onChange={(e) => setBusinessData(prev => ({ ...prev, breakTime: parseInt(e.target.value) || 0 }))}
+                        className="bg-background"
                       />
+                      <p className="text-xs text-muted-foreground">
+                        Time automatically blocked after every appointment to clean or rest.
+                      </p>
                     </div>
+
+                    <Separator className="bg-border/60" />
+
                     <div className="space-y-2">
                       <Label>Book ahead limit (days)</Label>
                       <Input 
                         type="number" 
                         value={businessData.bookAhead}
                         onChange={(e) => setBusinessData(prev => ({ ...prev, bookAhead: parseInt(e.target.value) || 0 }))}
+                        className="bg-background"
                       />
+                      <p className="text-xs text-muted-foreground">
+                        How far in the future customers can make a booking.
+                      </p>
                     </div>
                   </div>
                 </div>
+
               </div>
             </div>
           </div>

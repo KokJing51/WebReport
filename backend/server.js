@@ -44,7 +44,10 @@ app.use('/api/bookings', bookingsRoutes);
 // 3. Marketplace Routes (Read - Merchant DB)
 const merchantDb = new Database(path.join(__dirname, 'Merchantdb/merchant.db'));
 
-// --- [NEW] 4. Connect to Booking DB ---
+// --- [NEW] 4. Connect to Salon DB (Main booking database) ---
+// This is the main database used by the WhatsApp bot and should be used for all bookings
+const salonDb = new Database(path.join(__dirname, '../../../salon.db'));
+// Also keep bookingDb for backward compatibility (if needed)
 const bookingDb = new Database(path.join(__dirname, 'BookingDb/bookings.db'));
 // --------------------------------------
 
@@ -161,15 +164,20 @@ app.get('/api/booked-slots', (req, res) => {
             return res.status(400).json({ error: "Missing merchant_id or date" });
         }
 
-        // Fetch all confirmed bookings for this merchant & date
-        const bookings = bookingDb.prepare(`
-            SELECT booking_time 
+        // Fetch all confirmed bookings for this merchant & date from salon.db
+        const bookings = salonDb.prepare(`
+            SELECT start_dt 
             FROM bookings 
-            WHERE merchant_id = ? AND booking_date = ? AND status != 'cancelled'
+            WHERE merchant_id = ? AND DATE(start_dt) = ? AND status != 'cancelled'
         `).all(merchant_id, date);
 
-        // Return array of times, e.g. ["2:00 PM", "4:30 PM"]
-        res.json(bookings.map(b => b.booking_time));
+        // Convert ISO timestamps to time strings (HH:MM format)
+        const bookedTimes = bookings.map(b => {
+            const dt = new Date(b.start_dt);
+            return dt.toTimeString().slice(0, 5); // "HH:MM"
+        });
+
+        res.json(bookedTimes);
     } catch (err) {
         console.error("Error fetching booked slots:", err);
         res.status(500).json({ error: "Failed to fetch booked slots" });
@@ -191,6 +199,145 @@ app.post('/api/reviews', (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Failed to submit review" });
+    }
+});
+
+// --- DASHBOARD STATISTICS ENDPOINTS ---
+
+// Get dashboard statistics for a merchant
+app.get('/api/dashboard/stats/:merchant_id', (req, res) => {
+    try {
+        const { merchant_id } = req.params;
+        const today = new Date().toISOString().split('T')[0];
+        
+        // Note: salon.db doesn't have merchant_id, it's designed for a single salon
+        // For now, we'll get ALL bookings from salon.db
+        
+        // Today's bookings
+        const todaysBookings = salonDb.prepare(`
+            SELECT COUNT(*) as count 
+            FROM bookings 
+            WHERE DATE(start_dt) = ? AND status = 'confirmed'
+        `).get(today);
+        
+        // This week's revenue (calculate from services)
+        const weekStart = new Date();
+        weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+        const weekStartStr = weekStart.toISOString();
+        
+        const weeklyBookings = salonDb.prepare(`
+            SELECT b.*, s.price
+            FROM bookings b
+            JOIN services s ON b.service_id = s.id
+            WHERE b.start_dt >= ? AND b.status = 'confirmed'
+        `).all(weekStartStr);
+        
+        const weeklyRevenue = weeklyBookings.reduce((sum, booking) => sum + (booking.price || 0), 0);
+        
+        // Total bookings this month
+        const monthStart = new Date();
+        monthStart.setDate(1);
+        const monthStartStr = monthStart.toISOString();
+        
+        const monthlyBookings = salonDb.prepare(`
+            SELECT COUNT(*) as count
+            FROM bookings
+            WHERE start_dt >= ? AND status = 'confirmed'
+        `).get(monthStartStr);
+        
+        // No-show rate (cancelled bookings)
+        const cancelledRate = salonDb.prepare(`
+            SELECT 
+                COUNT(CASE WHEN status = 'cancelled' THEN 1 END) * 100.0 / NULLIF(COUNT(*), 0) as rate
+            FROM bookings
+            WHERE start_dt >= ?
+        `).get(monthStartStr);
+        
+        res.json({
+            todaysBookings: todaysBookings.count || 0,
+            weeklyRevenue: Math.round(weeklyRevenue || 0),
+            monthlyBookings: monthlyBookings.count || 0,
+            noShowRate: parseFloat((cancelledRate.rate || 0).toFixed(1))
+        });
+    } catch (err) {
+        console.error('Error fetching dashboard stats:', err);
+        res.status(500).json({ error: "Failed to fetch dashboard statistics" });
+    }
+});
+
+// Get bookings by time of day
+app.get('/api/dashboard/bookings-by-time/:merchant_id', (req, res) => {
+    try {
+        const { merchant_id } = req.params;
+        const monthStart = new Date();
+        monthStart.setDate(1);
+        const monthStartStr = monthStart.toISOString();
+        
+        const bookingsByTime = salonDb.prepare(`
+            SELECT 
+                CAST(strftime('%H', start_dt) AS INTEGER) as hour,
+                COUNT(*) as count
+            FROM bookings
+            WHERE start_dt >= ? AND status = 'confirmed'
+            GROUP BY hour
+            ORDER BY hour
+        `).all(monthStartStr);
+        
+        res.json(bookingsByTime);
+    } catch (err) {
+        console.error('Error fetching bookings by time:', err);
+        res.status(500).json({ error: "Failed to fetch bookings by time" });
+    }
+});
+
+// Get top services
+app.get('/api/dashboard/top-services/:merchant_id', (req, res) => {
+    try {
+        const { merchant_id } = req.params;
+        const monthStart = new Date();
+        monthStart.setDate(1);
+        const monthStartStr = monthStart.toISOString();
+        
+        const topServices = salonDb.prepare(`
+            SELECT 
+                s.name,
+                COUNT(b.id) as bookings,
+                COALESCE(SUM(s.price), 0) as revenue
+            FROM bookings b
+            JOIN services s ON b.service_id = s.id
+            WHERE b.start_dt >= ? AND b.status = 'confirmed'
+            GROUP BY s.id, s.name
+            ORDER BY bookings DESC
+            LIMIT 5
+        `).all(monthStartStr);
+        
+        res.json(topServices);
+    } catch (err) {
+        console.error('Error fetching top services:', err);
+        res.status(500).json({ error: "Failed to fetch top services" });
+    }
+});
+
+// Get monthly bookings trend
+app.get('/api/dashboard/monthly-trend/:merchant_id', (req, res) => {
+    try {
+        const { merchant_id } = req.params;
+        
+        const monthlyTrend = salonDb.prepare(`
+            SELECT 
+                strftime('%Y-%m', start_dt) as month,
+                COUNT(*) as count
+            FROM bookings
+            WHERE status = 'confirmed'
+            GROUP BY month
+            ORDER BY month DESC
+            LIMIT 12
+        `).all();
+        
+        res.json(monthlyTrend.reverse());
+    } catch (err) {
+        console.error('Error fetching monthly trend:', err);
+        res.status(500).json({ error: "Failed to fetch monthly trend" });
     }
 });
 

@@ -230,20 +230,29 @@ export function CalendarPage({ onNavigate, user }: CalendarPageProps) {
       const endDate = new Date(date);
       endDate.setHours(date.getHours() + 1); // Default 1 hour duration
       
+      // Get service name - try to find it from the services list if not provided
+      let serviceName = booking.service_name;
+      if (!serviceName && booking.service_id && services.length > 0) {
+        const service = services.find(s => s.id === booking.service_id);
+        serviceName = service ? service.name : null;
+      }
+      // Use "Booking" as final fallback instead of generic "Service"
+      serviceName = serviceName || `Booking #${booking.id}`;
+      
       return {
         id: booking.id,
-        title: `${booking.service_name || 'Service'} - ${booking.customer_name}`,
+        title: `${serviceName} - ${booking.customer_name}`,
         start: date.toISOString(),
         end: endDate.toISOString(),
         backgroundColor: booking.status === 'cancelled' ? '#dc3545' : '#0d6efd',
         customer_name: booking.customer_name,
-        service_name: booking.service_name,
+        service_name: serviceName,
         booking_date: booking.booking_date,
         booking_time: booking.booking_time,
         status: booking.status
       };
     });
-  }, [bookings]);
+  }, [bookings, services]);
 
   // Parse booking title to extract service and customer
   const parseBookingTitle = (title: string): { service: string; customer: string } => {
@@ -292,13 +301,20 @@ export function CalendarPage({ onNavigate, user }: CalendarPageProps) {
                    b.booking_time.startsWith(`${hour.toString().padStart(2, '0')}:`);
           });
           
+          // Get better service name
+          let serviceName = booking.service_name;
+          if (!serviceName && actualBooking?.service_id && services.length > 0) {
+            const service = services.find(s => s.id === actualBooking.service_id);
+            serviceName = service ? service.name : null;
+          }
+          
           slots.push({
             id: `${dateStr}-${hour}`,
             time: timeStr,
             status: booking.status === 'cancelled' ? 'cancelled' : 'booked',
             customer: booking.customer_name,
-            service: booking.service_name || 'Service',
-            staff: 'Staff',
+            service: serviceName || `Booking #${actualBooking?.id || booking.id || ''}`,
+            staff: actualBooking?.staff_name || 'Staff',
             bookingId: actualBooking?.id || booking.id // Use actual booking ID if available
           });
         } else {
@@ -476,7 +492,39 @@ export function CalendarPage({ onNavigate, user }: CalendarPageProps) {
               {day.slots.map((slot) => (
                 <button
                   key={slot.id}
-                  onClick={() => setSelectedSlot(slot)}
+                  onClick={() => {
+                    // If slot is open, open booking modal with pre-filled date/time
+                    if (slot.status === 'open') {
+                      // Convert time from "2:00 PM" format to "14:00" format
+                      const [time, period] = slot.time.split(' ');
+                      let [hours, minutes] = time.split(':').map(Number);
+                      
+                      if (period === 'PM' && hours !== 12) {
+                        hours += 12;
+                      } else if (period === 'AM' && hours === 12) {
+                        hours = 0;
+                      }
+                      
+                      const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+                      
+                      setNewBooking({
+                        customer_name: '',
+                        customer_phone: '',
+                        customer_email: '',
+                        booking_date: day.date,
+                        booking_time: timeString,
+                        service_id: '',
+                        staff_id: '',
+                        party_size: 1,
+                        total_price: '',
+                        notes: ''
+                      });
+                      setShowAddBooking(true);
+                    } else {
+                      // For booked slots, show details
+                      setSelectedSlot(slot);
+                    }
+                  }}
                   className={cn(
                     "w-full p-2 rounded-lg text-left transition-colors text-xs",
                     getStatusColor(slot.status)
@@ -789,7 +837,27 @@ export function CalendarPage({ onNavigate, user }: CalendarPageProps) {
                           );
                         })
                       ) : (
-                        <div className="h-full border-2 border-dashed border-gray-200 rounded-lg flex items-center justify-center text-xs text-muted-foreground hover:border-gray-300 hover:bg-gray-50 cursor-pointer transition-colors">
+                        <div 
+                          className="h-full border-2 border-dashed border-gray-200 rounded-lg flex items-center justify-center text-xs text-muted-foreground hover:border-gray-300 hover:bg-gray-50 cursor-pointer transition-colors"
+                          onClick={() => {
+                            // Pre-fill booking form with this date and time
+                            const dateStr = currentDate.toISOString().split('T')[0];
+                            // Use time24 format for consistency
+                            setNewBooking({
+                              customer_name: '',
+                              customer_phone: '',
+                              customer_email: '',
+                              booking_date: dateStr,
+                              booking_time: slot.time24,
+                              service_id: '',
+                              staff_id: '',
+                              party_size: 1,
+                              total_price: '',
+                              notes: ''
+                            });
+                            setShowAddBooking(true);
+                          }}
+                        >
                           Available
                         </div>
                       )}
@@ -939,7 +1007,19 @@ export function CalendarPage({ onNavigate, user }: CalendarPageProps) {
               {selectedSlot.service && (
                 <div>
                   <p className="text-sm font-medium">Service</p>
-                  <p className="text-sm text-muted-foreground">{selectedSlot.service}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedSlot.service}
+                    {selectedSlot.bookingId && services.length > 0 && (() => {
+                      const booking = bookings.find(b => b.id === selectedSlot.bookingId);
+                      if (booking?.service_id) {
+                        const service = services.find(s => s.id === booking.service_id);
+                        if (service && service.price) {
+                          return ` - RM ${service.price}`;
+                        }
+                      }
+                      return '';
+                    })()}
+                  </p>
                 </div>
               )}
               
@@ -1438,7 +1518,10 @@ export function CalendarPage({ onNavigate, user }: CalendarPageProps) {
                       total_price: '',
                       notes: ''
                     });
-                    fetchBookings();
+                    // Refresh bookings after a short delay to ensure backend has processed
+                    setTimeout(() => {
+                      fetchBookings();
+                    }, 500);
                   } catch (error: any) {
                     toast.error(error.message || 'Failed to create booking');
                   }

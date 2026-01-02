@@ -40,7 +40,7 @@ export function WhatsAppBanner() {
               </div>
 
               <h2 className="mb-4">
-                Grow Your Business with Fein Booking
+                Grow Your Business with Booklyn Booking
               </h2>
               <p className="text-[var(--color-text-secondary)] text-lg mb-8 leading-relaxed">
                 Join Malaysia's fastest-growing booking platform and reach thousands of customers. Our AI-powered WhatsApp chatbot handles bookings automatically, so you can focus on what you do best.
@@ -90,7 +90,7 @@ export function WhatsAppBanner() {
                       <MessageCircle className="w-6 h-6 text-white" />
                     </div>
                     <div>
-                      <div className="text-white">Fein Booking Bot</div>
+                      <div className="text-white">Booklyn Booking Bot</div>
                       <small className="text-emerald-100">
                         Online • Managing your bookings
                       </small>

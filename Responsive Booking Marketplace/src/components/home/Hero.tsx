@@ -28,7 +28,7 @@ export function Hero({ onSearch }: HeroProps) {
           {/* Small Label */}
           <div className="mb-8 animate-fade-in">
             <span className="text-sm tracking-wider text-[var(--color-text-secondary)] uppercase font-bold">
-              Fein Booking Platform
+              Booklyn Booking Platform
             </span>
           </div>
 

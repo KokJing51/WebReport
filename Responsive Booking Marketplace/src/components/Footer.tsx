@@ -46,7 +46,7 @@ export function Footer() {
                 <Sparkles className="w-6 h-6 text-white" />
               </div>
               <span className="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                Fein Booking
+                Booklyn Booking
               </span>
             </div>
             <p className="text-gray-400 text-sm leading-relaxed">
@@ -181,7 +181,7 @@ export function Footer() {
         {/* Bottom Bar */}
         <div className="border-t border-white/10 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-gray-400 text-sm">
-            © 2025 Fein Booking. All rights reserved.
+            © 2025 Booklyn Booking. All rights reserved.
           </p>
           <p className="text-gray-400 text-sm flex items-center gap-2">
             Made with <span className="text-pink-500">❤️</span> in Kuala Lumpur

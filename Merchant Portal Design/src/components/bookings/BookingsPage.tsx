@@ -57,96 +57,6 @@ interface Booking {
   created_at: string;
 }
 
-const mockBookings: Booking[] = [
-  {
-    id: 'BK001',
-    customer: {
-      name: 'Sarah Johnson',
-      phone: '+1 (555) 123-4567',
-      email: 'sarah.johnson@email.com'
-    },
-    service: 'Haircut & Style',
-    staff: 'Emma',
-    date: '2024-03-20',
-    time: '10:00 AM',
-    duration: 60,
-    price: 50,
-    status: 'confirmed',
-    channel: 'whatsapp',
-    notes: 'Prefers shorter length, similar to previous style',
-    createdAt: '2024-03-18T14:30:00Z'
-  },
-  {
-    id: 'BK002',
-    customer: {
-      name: 'Mike Chen',
-      phone: '+1 (555) 234-5678',
-      email: 'mike.chen@email.com'
-    },
-    service: 'Beard Trim',
-    staff: 'Alex',
-    date: '2024-03-20',
-    time: '11:30 AM',
-    duration: 30,
-    price: 25,
-    status: 'pending',
-    channel: 'whatsapp',
-    createdAt: '2024-03-18T15:45:00Z'
-  },
-  {
-    id: 'BK003',
-    customer: {
-      name: 'Lisa Wong',
-      phone: '+1 (555) 345-6789',
-      email: 'lisa.wong@email.com'
-    },
-    service: 'Hair Coloring',
-    staff: 'Emma',
-    date: '2024-03-21',
-    time: '1:00 PM',
-    duration: 120,
-    price: 80,
-    status: 'confirmed',
-    channel: 'web',
-    notes: 'First time customer, discussed blonde highlights',
-    createdAt: '2024-03-17T10:15:00Z'
-  },
-  {
-    id: 'BK004',
-    customer: {
-      name: 'John Doe',
-      phone: '+1 (555) 456-7890',
-      email: 'john.doe@email.com'
-    },
-    service: 'Haircut',
-    staff: 'Alex',
-    date: '2024-03-19',
-    time: '2:00 PM',
-    duration: 45,
-    price: 35,
-    status: 'cancelled',
-    channel: 'whatsapp',
-    createdAt: '2024-03-16T09:20:00Z'
-  },
-  {
-    id: 'BK005',
-    customer: {
-      name: 'Anna Taylor',
-      phone: '+1 (555) 567-8901',
-      email: 'anna.taylor@email.com'
-    },
-    service: 'Deep Conditioning',
-    staff: 'Emma',
-    date: '2024-03-18',
-    time: '9:00 AM',
-    duration: 45,
-    price: 40,
-    status: 'completed',
-    channel: 'whatsapp',
-    createdAt: '2024-03-15T16:30:00Z'
-  }
-];
-
 const getStatusColor = (status: string) => {
   switch (status) {
     case 'confirmed':
@@ -182,6 +92,7 @@ export function BookingsPage({ onNavigate, user }: BookingsPageProps) {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Fetch bookings
   useEffect(() => {
@@ -191,23 +102,32 @@ export function BookingsPage({ onNavigate, user }: BookingsPageProps) {
   }, [user]);
 
   const fetchBookings = async () => {
-    if (!user) return;
+    if (!user) {
+      setError('User not found. Please log in.');
+      return;
+    }
     
     const merchantId = user.merchant_id || user.id;
     if (!merchantId) {
       console.warn('No merchant_id or user id found');
+      setError('Merchant ID not found');
       return;
     }
     
     setIsLoading(true);
+    setError(null);
     try {
       const data = await apiService.getBookings({
         merchant_id: merchantId
       });
-      setBookings(data || []);
+      console.log('Fetched bookings:', data);
+      setBookings(Array.isArray(data) ? data : []);
     } catch (error: any) {
-      toast.error('Failed to fetch bookings');
-      console.error(error);
+      const errorMsg = error.message || 'Failed to fetch bookings';
+      setError(errorMsg);
+      toast.error(errorMsg);
+      console.error('Booking fetch error:', error);
+      setBookings([]);
     } finally {
       setIsLoading(false);
     }
@@ -264,14 +184,27 @@ export function BookingsPage({ onNavigate, user }: BookingsPageProps) {
     }
   };
 
-  const filteredBookings = bookings.filter(booking => {
-    const matchesSearch = booking.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         booking.id.toString().includes(searchTerm.toLowerCase()) ||
-                         (booking.service_name || '').toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || booking.status === statusFilter;
-    // Note: channel filter removed as it's not in the database schema
-    return matchesSearch && matchesStatus;
-  });
+  const filteredBookings = React.useMemo(() => {
+    if (!Array.isArray(bookings)) return [];
+    
+    return bookings
+      .filter(booking => {
+        if (!booking) return false;
+        
+        const matchesSearch = (
+          (booking.customer_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (booking.id || '').toString().includes(searchTerm.toLowerCase()) ||
+          (booking.service_name || '').toLowerCase().includes(searchTerm.toLowerCase())
+        );
+        const matchesStatus = statusFilter === 'all' || booking.status === statusFilter;
+        // Note: channel filter removed as it's not in the database schema
+        return matchesSearch && matchesStatus;
+      })
+      .sort((a, b) => {
+        // Sort by booking ID in descending order (most recently created first)
+        return b.id - a.id; // Descending order (ID 59, 58, 57, etc.)
+      });
+  }, [bookings, searchTerm, statusFilter]);
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredBookings.length / itemsPerPage);
@@ -286,7 +219,7 @@ export function BookingsPage({ onNavigate, user }: BookingsPageProps) {
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedBookings(paginatedBookings.map(b => b.id));
+      setSelectedBookings(paginatedBookings.map(b => b.id.toString()));
     } else {
       setSelectedBookings([]);
     }
@@ -325,6 +258,32 @@ export function BookingsPage({ onNavigate, user }: BookingsPageProps) {
           View Calendar
         </Button>
       </motion.div>
+
+      {/* Error Display */}
+      {error && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-red-50 border border-red-200 rounded-lg p-4"
+        >
+          <div className="flex items-start gap-3">
+            <XCircle className="h-5 w-5 text-red-600 mt-0.5" />
+            <div>
+              <h3 className="font-medium text-red-900">Error loading bookings</h3>
+              <p className="text-sm text-red-700 mt-1">{error}</p>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={fetchBookings}
+                className="mt-3"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Try Again
+              </Button>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* Filters and Search */}
       <motion.div
@@ -449,12 +408,25 @@ export function BookingsPage({ onNavigate, user }: BookingsPageProps) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {paginatedBookings.map((booking) => (
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                    Loading bookings...
+                  </TableCell>
+                </TableRow>
+              ) : paginatedBookings.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                    No bookings found
+                  </TableCell>
+                </TableRow>
+              ) : (
+                paginatedBookings.map((booking) => (
                 <TableRow key={booking.id} className="cursor-pointer hover:bg-muted/50">
                   <TableCell>
                     <Checkbox
-                      checked={selectedBookings.includes(booking.id)}
-                      onCheckedChange={(checked) => handleSelectBooking(booking.id, checked as boolean)}
+                      checked={selectedBookings.includes(booking.id.toString())}
+                      onCheckedChange={(checked) => handleSelectBooking(booking.id.toString(), checked as boolean)}
                     />
                   </TableCell>
                   <TableCell className="font-mono text-sm">#{booking.id}</TableCell>
@@ -501,7 +473,8 @@ export function BookingsPage({ onNavigate, user }: BookingsPageProps) {
                     </Button>
                   </TableCell>
                 </TableRow>
-              ))}
+              ))
+              )}
             </TableBody>
           </Table>
 

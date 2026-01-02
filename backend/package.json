@@ -7,7 +7,10 @@
     "start": "node server.js",
     "db:init": "node db/init.js",
     "db:init:booking": "node BookingDb/init_booking.js",
-    "setup": "npm install && node Merchantdb/init.js"
+    "db:setup": "npm run db:init && npm run db:init:booking",
+    "db:check": "node scripts/check-database.js",
+    "db:fix": "node scripts/fix-orphaned-bookings.js",
+    "setup": "npm install && npm run db:setup"
   },
   "dependencies": {
     "better-sqlite3": "^11.0.0",

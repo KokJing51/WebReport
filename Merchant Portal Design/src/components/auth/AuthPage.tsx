@@ -116,9 +116,9 @@ export function AuthPage({ onLogin, onStartOnboarding }: AuthPageProps) {
         {/* Logo */}
         <motion.div className="text-center" variants={fadeInUp}>
           <div className="flex justify-center mb-4">
-            <img src={logo} alt="Fein Booking" className="h-16 w-16" style={{ mixBlendMode: 'multiply' }} />
+            <img src={logo} alt="Booklyn Booking" className="h-16 w-16" style={{ mixBlendMode: 'multiply' }} />
           </div>
-          <h1 className="text-2xl font-bold">Fein Booking</h1>
+          <h1 className="text-2xl font-bold">Booklyn Booking</h1>
           <p className="text-muted-foreground">Automate your bookings with WhatsApp AI</p>
         </motion.div>
 

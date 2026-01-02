@@ -12,6 +12,7 @@ import {
   Menu,
   X,
   Star,
+  Presentation,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { cn } from "./ui/utils";
@@ -31,6 +32,7 @@ const navigationItems = [
   { id: "reviews", label: "Reviews", icon: Star },
   { id: "content", label: "Content", icon: FileText },
   { id: "automations", label: "Automations", icon: Zap },
+  { id: "showcase", label: "Showcase", icon: Presentation },
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
@@ -85,7 +87,7 @@ export function Layout({
             <div className="flex items-center gap-2">
               <MessageSquare className="h-8 w-8 text-primary" />
               <h1 className="text-xl font-semibold">
-                Fein Booking
+                Booklyn Booking
               </h1>
             </div>
             <Button

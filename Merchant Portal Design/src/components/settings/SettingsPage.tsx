@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -25,8 +25,11 @@ import {
   Key,
   Info,
   CheckCircle,
-  AlertTriangle
+  AlertTriangle,
+  RefreshCw
 } from 'lucide-react';
+import { apiService } from '../../services/api';
+import { toast } from 'sonner';
 
 interface SettingsPageProps {
   onNavigate: (page: string) => void;
@@ -40,42 +43,9 @@ interface TeamMember {
   avatar?: string;
   lastActive: string;
   invited: boolean;
+  bio?: string;
+  specialties?: string[];
 }
-
-const mockTeamMembers: TeamMember[] = [
-  {
-    id: '1',
-    name: 'John Doe',
-    email: 'john@stylecraftsalon.com',
-    role: 'owner',
-    lastActive: '2024-03-18T14:30:00Z',
-    invited: false
-  },
-  {
-    id: '2',
-    name: 'Emma Rodriguez',
-    email: 'emma@stylecraftsalon.com',
-    role: 'staff',
-    lastActive: '2024-03-18T13:15:00Z',
-    invited: false
-  },
-  {
-    id: '3',
-    name: 'Alex Johnson',
-    email: 'alex@stylecraftsalon.com',
-    role: 'staff',
-    lastActive: '2024-03-18T12:45:00Z',
-    invited: false
-  },
-  {
-    id: '4',
-    name: 'Sarah Manager',
-    email: 'sarah@stylecraftsalon.com',
-    role: 'admin',
-    lastActive: 'Never',
-    invited: true
-  }
-];
 
 const getRoleBadgeColor = (role: string) => {
   switch (role) {
@@ -112,9 +82,11 @@ export function SettingsPage({ onNavigate }: SettingsPageProps) {
     }
   };
 
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(mockTeamMembers);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('staff');
+  const [isLoadingTeam, setIsLoadingTeam] = useState(false);
+  const [teamError, setTeamError] = useState<string | null>(null);
   
   const [notificationSettings, setNotificationSettings] = useState({
     newBookings: true,
@@ -126,6 +98,70 @@ export function SettingsPage({ onNavigate }: SettingsPageProps) {
     sms: false,
     whatsapp: true
   });
+
+  // Fetch team members (staff) from database
+  useEffect(() => {
+    fetchTeamMembers();
+  }, []);
+
+  const fetchTeamMembers = async () => {
+    setIsLoadingTeam(true);
+    setTeamError(null);
+    try {
+      // Get merchant_id from localStorage user
+      const userStr = localStorage.getItem('user');
+      if (!userStr) {
+        setTeamError('User not found. Please log in again.');
+        return;
+      }
+      
+      const user = JSON.parse(userStr);
+      const merchantId = user.merchant_id || user.id;
+      
+      if (!merchantId) {
+        setTeamError('Merchant ID not found');
+        return;
+      }
+
+      // Fetch staff from API
+      const staffData = await apiService.getStaff(merchantId);
+      
+      // Transform staff data to TeamMember format
+      const transformedMembers: TeamMember[] = (staffData || []).map((staff: any) => ({
+        id: staff.id.toString(),
+        name: staff.name || 'Unknown',
+        email: staff.email || `${staff.name?.toLowerCase().replace(/\s+/g, '')}@staff.local`,
+        role: 'staff' as const,
+        avatar: staff.photo_url || staff.photo,
+        lastActive: staff.last_active || 'Never',
+        invited: false,
+        bio: staff.bio,
+        specialties: Array.isArray(staff.specialties) ? staff.specialties : []
+      }));
+      
+      // Add the current user as owner if they exist
+      if (user) {
+        const ownerMember: TeamMember = {
+          id: 'owner-' + user.id,
+          name: user.business_name || user.email || 'Business Owner',
+          email: user.email || 'owner@business.local',
+          role: 'owner',
+          lastActive: new Date().toISOString(),
+          invited: false
+        };
+        
+        setTeamMembers([ownerMember, ...transformedMembers]);
+      } else {
+        setTeamMembers(transformedMembers);
+      }
+    } catch (error: any) {
+      console.error('Failed to fetch team members:', error);
+      setTeamError(error.message || 'Failed to load team members');
+      toast.error('Failed to load team members');
+    } finally {
+      setIsLoadingTeam(false);
+    }
+  };
 
   const [paymentSettings, setPaymentSettings] = useState({
     stripeConnected: true,
@@ -198,13 +234,35 @@ export function SettingsPage({ onNavigate }: SettingsPageProps) {
             <motion.div variants={fadeInUp}>
             <Card>
               <CardHeader>
-                <CardTitle>Team Members</CardTitle>
+                <CardTitle className="flex items-center justify-between">
+                  <span>Team Members</span>
+                  {!isLoadingTeam && (
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={fetchTeamMembers}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Refresh
+                    </Button>
+                  )}
+                </CardTitle>
                 <CardDescription>
                   Manage who has access to your booking system
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
+                  {/* Error Display */}
+                  {teamError && (
+                    <Alert variant="destructive">
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertDescription>
+                        {teamError}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
                   {/* Invite new member */}
                   <div className="flex gap-2 p-4 border rounded-lg bg-muted/50">
                     <Input
@@ -229,9 +287,22 @@ export function SettingsPage({ onNavigate }: SettingsPageProps) {
                     </Button>
                   </div>
 
-                  {/* Team members list */}
-                  <div className="space-y-3">
-                    {teamMembers.map((member) => (
+                  {/* Loading State */}
+                  {isLoadingTeam ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2" />
+                      <p>Loading team members...</p>
+                    </div>
+                  ) : teamMembers.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Users className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                      <p>No team members found</p>
+                      <p className="text-sm">Add staff members in the Content Manager</p>
+                    </div>
+                  ) : (
+                    /* Team members list */
+                    <div className="space-y-3">
+                      {teamMembers.map((member) => (
                       <div key={member.id} className="flex items-center justify-between p-4 border rounded-lg">
                         <div className="flex items-center gap-3">
                           <Avatar>
@@ -253,7 +324,24 @@ export function SettingsPage({ onNavigate }: SettingsPageProps) {
                               )}
                             </div>
                             <p className="text-sm text-muted-foreground">{member.email}</p>
-                            <p className="text-xs text-muted-foreground">
+                            {member.bio && (
+                              <p className="text-xs text-muted-foreground mt-1">{member.bio}</p>
+                            )}
+                            {member.specialties && member.specialties.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {member.specialties.slice(0, 3).map((specialty, idx) => (
+                                  <Badge key={idx} variant="outline" className="text-xs">
+                                    {specialty}
+                                  </Badge>
+                                ))}
+                                {member.specialties.length > 3 && (
+                                  <Badge variant="outline" className="text-xs">
+                                    +{member.specialties.length - 3} more
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
+                            <p className="text-xs text-muted-foreground mt-1">
                               Last active: {member.lastActive === 'Never' ? 'Never' : new Date(member.lastActive).toLocaleDateString()}
                             </p>
                           </div>
@@ -276,7 +364,8 @@ export function SettingsPage({ onNavigate }: SettingsPageProps) {
                         </div>
                       </div>
                     ))}
-                  </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

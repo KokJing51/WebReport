@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Card,
@@ -29,7 +29,8 @@ import {
   Image as ImageIcon,
   Star,
 } from 'lucide-react';
-// import { unsplash_tool } from '../ui/utils';   // ← uncomment if you really need it
+import { apiService } from '../../services/api';
+import { toast } from 'sonner';
 
 interface ContentManagerProps {
   onNavigate: (page: string) => void;
@@ -53,62 +54,6 @@ interface StaffMember {
   specialties: string[];
   active: boolean;
 }
-
-const mockServices: Service[] = [
-  {
-    id: '1',
-    name: 'Haircut & Style',
-    description: 'Professional haircut with wash and style',
-    duration: 60,
-    price: 50,
-    active: true,
-    category: 'Hair',
-  },
-  {
-    id: '2',
-    name: 'Hair Coloring',
-    description: 'Full color service including consultation',
-    duration: 120,
-    price: 80,
-    active: true,
-    category: 'Hair',
-  },
-  {
-    id: '3',
-    name: 'Beard Trim',
-    description: 'Precision beard trimming and styling',
-    duration: 30,
-    price: 25,
-    active: true,
-    category: 'Grooming',
-  },
-  {
-    id: '4',
-    name: 'Deep Conditioning',
-    description: 'Intensive hair treatment and conditioning',
-    duration: 45,
-    price: 40,
-    active: true,
-    category: 'Treatment',
-  },
-];
-
-const mockStaff: StaffMember[] = [
-  {
-    id: '1',
-    name: 'Emma Rodriguez',
-    bio: 'Senior stylist with 8 years of experience. Specializes in color and modern cuts.',
-    specialties: ['Hair Coloring', 'Haircut & Style', 'Deep Conditioning'],
-    active: true,
-  },
-  {
-    id: '2',
-    name: 'Alex Johnson',
-    bio: 'Master barber and grooming specialist. Expert in traditional and modern styles.',
-    specialties: ['Haircut & Style', 'Beard Trim'],
-    active: true,
-  },
-];
 
 export function ContentManager({ onNavigate }: ContentManagerProps) {
   const fadeInUp = {
@@ -150,11 +95,71 @@ export function ContentManager({ onNavigate }: ContentManagerProps) {
     email: 'hello@stylecraftsalon.com',
   });
 
-  const [services, setServices] = useState<Service[]>(mockServices);
-  const [staff, setStaff] = useState<StaffMember[]>(mockStaff);
+  const [services, setServices] = useState<Service[]>([]);
+  const [staff, setStaff] = useState<StaffMember[]>([]);
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
   const [galleryImages] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Fetch services and staff on mount
+  useEffect(() => {
+    fetchServicesAndStaff();
+  }, []);
+
+  const fetchServicesAndStaff = async () => {
+    setIsLoading(true);
+    try {
+      // Get merchant_id from localStorage user
+      const userStr = localStorage.getItem('user');
+      if (!userStr) {
+        toast.error('User not found. Please log in again.');
+        return;
+      }
+      
+      const user = JSON.parse(userStr);
+      const merchantId = user.merchant_id || user.id;
+      
+      if (!merchantId) {
+        toast.error('Merchant ID not found');
+        return;
+      }
+
+      const [servicesData, staffData] = await Promise.all([
+        apiService.getServices(merchantId),
+        apiService.getStaff(merchantId)
+      ]);
+      
+      // Transform services data to match the Service interface
+      const transformedServices = (servicesData || []).map((s: any) => ({
+        id: s.id.toString(),
+        name: s.name || '',
+        description: s.description || '',
+        duration: s.duration_min || s.duration || 60,
+        price: s.price || 0,
+        active: s.active !== undefined ? s.active : true,
+        category: s.category || 'General'
+      }));
+      
+      // Transform staff data to match the StaffMember interface
+      const transformedStaff = (staffData || []).map((s: any) => ({
+        id: s.id.toString(),
+        name: s.name || '',
+        bio: s.bio || '',
+        photo: s.photo_url || s.photo,
+        specialties: Array.isArray(s.specialties) ? s.specialties : (s.specialties ? [s.specialties] : []),
+        active: s.active !== undefined ? s.active : true
+      }));
+      
+      setServices(transformedServices);
+      setStaff(transformedStaff);
+    } catch (error: any) {
+      console.error('Failed to fetch services/staff:', error);
+      toast.error('Failed to load services and staff data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSaveProfile = () => {
     console.log('Saving business profile:', businessProfile);
